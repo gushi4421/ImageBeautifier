@@ -1,0 +1,6 @@
+web/
+ui/
+assets/
+templates/
+*.__pyc__
+test/
