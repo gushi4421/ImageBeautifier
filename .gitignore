@@ -2,6 +2,7 @@ web/
 ui/
 assets/
 templates/
-*.__pyc__
+*.pyc
 test/
 学习笔记.md
+data/
