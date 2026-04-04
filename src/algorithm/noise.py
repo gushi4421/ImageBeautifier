@@ -3,9 +3,13 @@
 
 """
 
+import numpy as np
+from pathlib import Path
+import cv2 as cv
+
 
 # 1. 加噪
-def add_noise(img):
+def add_noise(image, noise_type: str = "gaussian") -> np.ndarray:
     pass
 
 
