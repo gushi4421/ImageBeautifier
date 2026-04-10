@@ -10,7 +10,8 @@ from src.management.image_io import load_image, save_image
 from src.algorithm.noise import add_noise, remove_noise
 import time
 from src.algorithm.color import to_grayscale, binarize, big_jin_fa, colormap
-from src.algorithm.enhancer import adjust_brightness, adjust_contrast
+from src.algorithm.enhancer import adjust_brightness, adjust_contrast, histogram
+from src.algorithm.beautifier import emboss, frosted
 
 
 def main():
@@ -28,7 +29,9 @@ def main():
     binary_image = big_jin_fa(image.copy())
     color_image = colormap(gray_image.copy())
     bright_image = adjust_brightness(image.copy(), beta=100)
-    contrast_image = adjust_contrast(image.copy(), alpha=1.5)
+    contrast_image = histogram(image.copy())
+    emboss_image = emboss(image.copy())
+    frosted_image = frosted(image.copy())
 
     save_image(translate_image, "data/translate_image.png")
     save_image(zoom_image, "data/zoom_image.png")
@@ -44,6 +47,8 @@ def main():
     save_image(color_image, "data/color_image.png")
     save_image(bright_image, "data/bright_image.png")
     save_image(contrast_image, "data/contrast_image.png")
+    save_image(emboss_image, "data/emboss_image.png")
+    save_image(frosted_image, "data/frosted_image.png")
 
 
 if __name__ == "__main__":
