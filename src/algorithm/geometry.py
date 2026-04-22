@@ -16,8 +16,14 @@ import math
 
 def translate(image: np.ndarray, tx, ty) -> np.ndarray:
     """
-    图像平移变换.
-    tx: 水平方向位移; ty: 垂直方向位移.
+    图像绕中心点旋转变换.
+
+    Args:
+        image: 原始图像.
+        angle: 旋转的角度(角度制), 正值为逆时针旋转.
+
+    Returns:
+        旋转后的图像, 尺寸与原图保持一致.
     """
     h, w, _ = image.shape
     target_image = np.zeros_like(image)
@@ -39,7 +45,13 @@ def translate(image: np.ndarray, tx, ty) -> np.ndarray:
 def rotate(image: np.ndarray, angle):
     """
     图像绕中心点旋转变换.
-    angle: 旋转角度(角度制).
+
+    Args:
+        image: 原始图像.
+        angle: 旋转的角度(角度制), 正值为逆时针旋转.
+
+    Returns:
+        旋转后的图像, 尺寸与原图保持一致.
     """
     h, w, _ = image.shape
     # 计算图像中心坐标
@@ -80,7 +92,14 @@ def rotate(image: np.ndarray, angle):
 def zoom(image: np.ndarray, x_scale, y_scale):
     """
     图像缩放变换 - 采用双线性插值算法.
-    x_scale, y_scale: 宽度和高度的缩放比例.
+
+    Args:
+        image: 原始图像.
+        x_scale: 水平方向(宽度)的缩放倍数.
+        y_scale: 垂直方向(高度)的缩放倍数.
+
+    Returns:
+        缩放后的新图像, 尺寸为 (W*x_scale, H*y_scale).
     """
     h, w, c = image.shape
     new_w = int(w * x_scale)
@@ -129,6 +148,13 @@ def zoom(image: np.ndarray, x_scale, y_scale):
 def flip(image: np.ndarray) -> np.ndarray:
     """
     水平翻转(镜像).
+
+    Args:
+        image: 输入图像.
+
+    Returns:
+        水平翻转后的图像.
+
     """
     h, w, c = image.shape
     target_image = np.zeros_like(image)
@@ -143,6 +169,16 @@ def flip(image: np.ndarray) -> np.ndarray:
 def shear(image: np.ndarray, start_x, end_x, start_y, end_y):
     """
     图像裁剪(剪切).
+
+    Args:
+        image: 输入图像.
+        start_x: 裁剪区域的起始水平坐标.
+        end_x: 裁剪区域的结束水平坐标.
+        start_y: 裁剪区域的起始垂直坐标.
+        end_y: 裁剪区域的结束垂直坐标.
+
+    Returns:
+        裁剪后的图像.
     """
     h, w, c = image.shape
     # 限制范围在图像有效宽高内

@@ -4,14 +4,24 @@ from src.algorithm.geometry import (
     zoom,
     flip,
     shear,
-    affine_transform,
 )
-from src.management.image_io import load_image, save_image
+from src.io.image_io import load_image, save_image
 from src.algorithm.noise import add_noise, remove_noise
 import time
-from src.algorithm.color import to_grayscale, binarize, big_jin_fa, colormap
+from src.algorithm.color import (
+    to_grayscale,
+    binarize,
+    otsu_binarize,
+    generate_colormap_lut,
+    apply_colormap,
+)
 from src.algorithm.enhancer import adjust_brightness, adjust_contrast, histogram
-from src.algorithm.beautifier import emboss, frosted
+from src.algorithm.beautifier import (
+    emboss,
+    frosted,
+    gaussian_blurring,
+    bilateral_filter_manual,
+)
 
 
 def main():
@@ -26,13 +36,16 @@ def main():
     mean_image = remove_noise(gaussian_image.copy(), mode="mean", kernal_size=3)
     median_image = remove_noise(gaussian_image.copy(), mode="median", kernal_size=3)
     gray_image = to_grayscale(image.copy())
-    binary_image = big_jin_fa(image.copy())
-    color_image = colormap(gray_image.copy())
+    binary_image = otsu_binarize(gray_image.copy())
+    color_image = apply_colormap(gray_image.copy())
     bright_image = adjust_brightness(image.copy(), beta=100)
     contrast_image = histogram(image.copy())
     emboss_image = emboss(image.copy())
     frosted_image = frosted(image.copy())
-
+    gaussian_blurring_image = gaussian_blurring(image.copy())
+    bilateral_image = bilateral_filter_manual(
+        image.copy(), kernel_size=5, sigma_s=75, sigma_r=75
+    )
     save_image(translate_image, "data/translate_image.png")
     save_image(zoom_image, "data/zoom_image.png")
     save_image(rotate_image, "data/rotate_image.png")
@@ -49,6 +62,8 @@ def main():
     save_image(contrast_image, "data/contrast_image.png")
     save_image(emboss_image, "data/emboss_image.png")
     save_image(frosted_image, "data/frosted_image.png")
+    save_image(gaussian_blurring_image, "data/gaussian_blurring_image.png")
+    save_image(bilateral_image, "data/bilateral_image.png")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,8 @@ def add_noise(image: np.ndarray, mode: str = "gaussian", **kwargs) -> np.ndarray
         image: 输入的原始图像.
         mode: 噪声模式, 支持 "gaussian" 和 "salt_pepper".
         kwargs: 噪声参数 (mean, sigma 或 prob).
+    Returns:
+        去噪平滑后的图像.
     """
     support_types = ["gaussian", "salt_pepper"]
     if mode not in support_types:
@@ -29,12 +31,12 @@ def add_noise(image: np.ndarray, mode: str = "gaussian", **kwargs) -> np.ndarray
         # 叠加噪声并进行溢出处理
         noisy_image = image.astype(np.float64) + noise
         return np.clip(noisy_image, 0, 255).astype(image.dtype)
-        
+
     elif mode == "salt_pepper":
         prob = kwargs.get("prob", 0.1)
         if prob > 1.0:
             raise ValueError("噪声比例不能大于1.0")
-            
+
         noise_image = image.copy()
         h, w, _ = image.shape
         # 生成随机概率矩阵, 用于决定哪些位置加噪
@@ -44,8 +46,12 @@ def add_noise(image: np.ndarray, mode: str = "gaussian", **kwargs) -> np.ndarray
         noise_image[random_matrix < (prob / 2.0)] = [0, 0, 0]
         # 比例的另一半设为盐噪声(白色 255)
         # 修正原代码逻辑符号错误: 使用 = 赋值而非 - 运算
-        noise_image[(random_matrix >= (prob / 2.0)) & (random_matrix < prob)] = [255, 255, 255]
-        
+        noise_image[(random_matrix >= (prob / 2.0)) & (random_matrix < prob)] = [
+            255,
+            255,
+            255,
+        ]
+
         return noise_image
 
 
@@ -55,7 +61,14 @@ def remove_noise(
 ) -> np.ndarray:
     """
     空间域滤波函数.
-    支持均值滤波(Mean Filter)和中值滤波(Median Filter).
+
+    Args:
+        image: 含有噪声的图像.
+        mode: 滤波模式, 'mean' 代表均值滤波, 'median' 代表中值滤波.
+        kernal_size: 滤波核的大小, 必须为奇数(如 3, 5, 7).
+
+    Returns:
+        去噪平滑后的图像.
     """
     if mode not in ["mean", "median"]:
         raise ValueError("不支持的滤波模式")
@@ -69,34 +82,41 @@ def remove_noise(
     padded_image = np.pad(
         image, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)), mode="reflect"
     )
-    
+
     filtered_image = np.zeros_like(image)
-    
+
     # 空间卷积/滑动窗口操作
     for u in range(w):
         for v in range(h):
             # 切片提取当前窗口内的像素块
             window = padded_image[v : v + kernal_size, u : u + kernal_size, :]
-            
+
             if mode == "mean":
                 # 均值滤波: 计算窗口内所有像素的平均值
                 filtered_image[v, u] = window.mean(axis=(0, 1)).astype(np.uint8)
             elif mode == "median":
                 # 中值滤波: 提取中间值, 对椒盐噪声有极强的抑制作用
                 filtered_image[v, u] = np.median(window, axis=(0, 1)).astype(np.uint8)
-                
+
     return filtered_image
 
 
-def better_salt_pepper_noise(image: np.ndarray, prob: float):
+def add_salt_pepper_noise_optimized(image: np.ndarray, prob: float):
     """
-    优化版的椒盐噪声生成, 通过随机坐标索引提高性能.
+    优化版的椒盐噪声生成。
+
+    Args:
+        image: 原始图像。
+        prob: 噪声出现的概率, 范围在 [0.0, 1.0] 之间。
+
+    Returns:
+        添加了椒盐噪声的图像副本。
     """
     if prob > 1.0:
         raise ValueError("噪声比例不能大于1.0")
     noise_image = image.copy()
     h, w, _ = image.shape
-    
+
     # 计算需要改变的像素总数
     total_pixels = int(h * w * prob)
     pepper_pixels = total_pixels // 2
@@ -111,5 +131,5 @@ def better_salt_pepper_noise(image: np.ndarray, prob: float):
     salt_y = np.random.randint(0, h, salt_pixels)
     salt_x = np.random.randint(0, w, salt_pixels)
     noise_image[salt_y, salt_x] = [255, 255, 255]
-    
+
     return noise_image

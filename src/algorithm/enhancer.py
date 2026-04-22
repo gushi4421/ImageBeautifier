@@ -10,7 +10,12 @@ def adjust_contrast(image: np.ndarray, alpha: float = 1.0):
     """
     调整图像对比度.
 
-    通过乘法因子 alpha 缩放像素值, 使亮部更亮, 暗部更暗.
+    Args:
+        image: 输入图像.
+        alpha: 对比度缩放因子, 大于 1.0 增强对比度, 小于 1.0 降低对比度.
+
+    Returns:
+        调整对比度后的图像.
     """
     # 转为浮点型防止计算溢出
     adjusted_image = image.astype(np.float32)
@@ -23,8 +28,12 @@ def adjust_contrast(image: np.ndarray, alpha: float = 1.0):
 def adjust_brightness(image: np.ndarray, beta: int = 0):
     """
     调整图像亮度.
+    Args:
+        image: 输入图像.
+        beta: 亮度偏移量, 正值增加亮度, 负值降低亮度.
 
-    通过加法因子 beta 整体提升或降低像素值.
+    Returns:
+        调整亮度后的图像.
     """
     adjusted_image = image.astype(np.float32)
     # 线性变换: f(x) = x + beta
@@ -37,7 +46,11 @@ def histogram(image: np.ndarray) -> np.ndarray:
     """
     直方图均衡化实现.
 
-    利用累积分布函数(CDF)作为映射函数, 将原图的灰度分布转化为均匀分布.
+    Args:
+        image: 输入的低对比度灰度图像.
+
+    Returns:
+        亮度分布均匀化后的增强图像.
     """
     total_pixels = image.size
     # 统计每个灰度级(0-255)出现的频次
