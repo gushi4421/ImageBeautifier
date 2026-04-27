@@ -1,94 +1,69 @@
 """
-该模块实现了对图像的美化处理.
-包含艺术滤镜特效: 浮雕(Emboss)与毛玻璃(Frosted).
+该模块实现空间域滤波算法.
+包含均值滤波、中值滤波、高斯模糊以及双边滤波.
 """
 
 import numpy as np
-import math
+
+from src.utils import generate_gaussian_kernel
 
 
-def emboss(image: np.ndarray) -> np.ndarray:
+def mean_filter(image: np.ndarray, kernel_size: int = 3) -> np.ndarray:
     """
-    浮雕效果滤镜.
+    均值滤波, 通过对邻域像素取平均值来平滑图像.
 
     Args:
-        image: 输入图像.
+        image: 含有噪声的图像.
+        kernel_size: 滤波核的大小, 必须为奇数(如 3, 5, 7).
 
     Returns:
-
+        均值平滑后的图像.
     """
-    # 转为浮点型以处理负数差值
-    image_float = image.astype(np.float32)
-    # 边缘填充, 确保输出尺寸一致
-    padded = np.pad(image_float, ((1, 1), (1, 1), (0, 0)), mode="edge")
+    if kernel_size % 2 == 0:
+        raise ValueError("卷积核大小必须为奇数")
 
-    # p1 为左上方邻域像素的加权和
-    p1 = padded[:-2, :-2] + padded[:-2, 1:-1] + padded[1:-1, :-2]
+    h, w, c = image.shape
+    pad_size = kernel_size // 2
+    padded_image = np.pad(
+        image, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)), mode="reflect"
+    )
+    filtered_image = np.zeros_like(image)
 
-    # p2 为右下方邻域像素的加权和
-    p2 = padded[2:, 2:] + padded[1:-1, 2:] + padded[2:, 1:-1]
+    for u in range(w):
+        for v in range(h):
+            window = padded_image[v : v + kernel_size, u : u + kernel_size, :]
+            filtered_image[v, u] = window.mean(axis=(0, 1)).astype(np.uint8)
 
-    # 核心公式: 邻域差值 + 灰度偏移量(128.0)
-    # 这种差分运算能抵消平滑区域(差值为0), 突出变化剧烈的边缘
-    embossed_image = p1 - p2 + 128.0
-
-    return np.clip(embossed_image, 0, 255).astype(np.uint8)
+    return filtered_image
 
 
-def frosted(image: np.ndarray, offset: int = 1) -> np.ndarray:
+def median_filter(image: np.ndarray, kernel_size: int = 3) -> np.ndarray:
     """
-    毛玻璃(磨砂)效果滤镜.
-
-    通过在局部邻域内进行随机像素采样, 破坏图像的连续性, 产生磨砂质感.
-    """
-    h, w, _ = image.shape
-    # 生成标准的坐标网格
-    x_grid, y_grid = np.meshgrid(np.arange(w), np.arange(h))
-
-    # 生成与图像等大的随机偏移矩阵
-    # offset 决定了磨砂的颗粒感粗细
-    random_x = np.random.randint(-offset, offset + 1, size=(h, w))
-    random_y = np.random.randint(-offset, offset + 1, size=(h, w))
-
-    # 将随机偏移叠加到原始坐标上, 得到映射后的源坐标
-    src_x = x_grid + random_x
-    src_y = y_grid + random_y
-
-    # 边界检查: 确保偏移后的坐标不会超出原图范围
-    src_x = np.clip(src_x, 0, w - 1)
-    src_y = np.clip(src_y, 0, h - 1)
-
-    # 核心映射: 利用索引广播(Indexing)一次性提取所有随机点的像素值
-    frosted_image = image[src_y, src_x]
-    return frosted_image
-
-
-def generate_gaussian_kernel(kernel_size: int = 3, sigma: float = 1.0) -> np.ndarray:
-    """
-    生成高斯模糊的卷积核
+    中值滤波, 通过取邻域像素的中位数来去除椒盐噪声.
 
     Args:
-        kernel_size: 卷积核的大小,必须是大于 0 的奇数
-        sigma: 高斯分布的标准差, 控制模糊的平滑度
+        image: 含有噪声的图像.
+        kernel_size: 滤波核的大小, 必须为奇数(如 3, 5, 7).
 
     Returns:
-        返回形状为 (kernel_size,kernel_size) 的二维浮点矩阵, 且和为1
+        中值平滑后的图像.
     """
-    if kernel_size % 2 == 0 or kernel_size < 0:
-        raise ValueError()
-    # 初始化卷积核
-    kernel = np.zeros((kernel_size, kernel_size), dtype=np.float64)
-    radius = kernel_size // 2
-    # 遍历矩阵每一个点
-    for i in range(kernel_size):
-        for j in range(kernel_size):
-            # 以卷积核中心为坐标中心的坐标
-            x = i - radius
-            y = j - radius
-            kernel[i, j] = math.exp(-(x**2 + y**2) / (2 * sigma**2))
-    # 保证权重之和为1
-    kernel = kernel / kernel.sum()
-    return kernel
+    if kernel_size % 2 == 0:
+        raise ValueError("卷积核大小必须为奇数")
+
+    h, w, c = image.shape
+    pad_size = kernel_size // 2
+    padded_image = np.pad(
+        image, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)), mode="reflect"
+    )
+    filtered_image = np.zeros_like(image)
+
+    for u in range(w):
+        for v in range(h):
+            window = padded_image[v : v + kernel_size, u : u + kernel_size, :]
+            filtered_image[v, u] = np.median(window, axis=(0, 1)).astype(np.uint8)
+
+    return filtered_image
 
 
 def gaussian_blurring(image: np.ndarray, kernel_size: int = 3, sigma: float = 1.0):

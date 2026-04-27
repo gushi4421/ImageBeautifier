@@ -1,12 +1,11 @@
 """
-该模块用于实现对图像的加噪和去噪处理.
-支持高斯噪声、椒盐噪声的生成, 以及均值滤波和中值滤波算法.
+该模块实现图像加噪处理.
+支持高斯噪声与椒盐噪声的生成.
 """
 
 import numpy as np
 
 
-# 1. 加噪逻辑层
 def add_noise(image: np.ndarray, mode: str = "gaussian", **kwargs) -> np.ndarray:
     """
     为图像添加特定类型的噪声.
@@ -53,52 +52,6 @@ def add_noise(image: np.ndarray, mode: str = "gaussian", **kwargs) -> np.ndarray
         ]
 
         return noise_image
-
-
-# 2. 去噪/滤波逻辑层
-def remove_noise(
-    image: np.ndarray, mode: str = "mean", kernal_size: int = 3
-) -> np.ndarray:
-    """
-    空间域滤波函数.
-
-    Args:
-        image: 含有噪声的图像.
-        mode: 滤波模式, 'mean' 代表均值滤波, 'median' 代表中值滤波.
-        kernal_size: 滤波核的大小, 必须为奇数(如 3, 5, 7).
-
-    Returns:
-        去噪平滑后的图像.
-    """
-    if mode not in ["mean", "median"]:
-        raise ValueError("不支持的滤波模式")
-    if kernal_size % 2 == 0:
-        raise ValueError("卷积核大小必须为奇数")
-
-    h, w, c = image.shape
-    # 计算填充大小, 保证输出图像尺寸不变
-    pad_size = kernal_size // 2
-    # 使用镜像填充(reflect)处理边缘像素
-    padded_image = np.pad(
-        image, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)), mode="reflect"
-    )
-
-    filtered_image = np.zeros_like(image)
-
-    # 空间卷积/滑动窗口操作
-    for u in range(w):
-        for v in range(h):
-            # 切片提取当前窗口内的像素块
-            window = padded_image[v : v + kernal_size, u : u + kernal_size, :]
-
-            if mode == "mean":
-                # 均值滤波: 计算窗口内所有像素的平均值
-                filtered_image[v, u] = window.mean(axis=(0, 1)).astype(np.uint8)
-            elif mode == "median":
-                # 中值滤波: 提取中间值, 对椒盐噪声有极强的抑制作用
-                filtered_image[v, u] = np.median(window, axis=(0, 1)).astype(np.uint8)
-
-    return filtered_image
 
 
 def add_salt_pepper_noise_optimized(image: np.ndarray, prob: float):
