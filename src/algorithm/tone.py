@@ -1,6 +1,6 @@
 """
 该模块实现像素级点操作.
-包含灰度化、二值化(含OTSU)、伪彩色映射、对比度调节、亮度调节以及直方图均衡化.
+包含灰度化、二值化(含OTSU)、伪彩色映射、对比度调节、亮度调节、饱和度调节以及直方图均衡化.
 """
 
 import numpy as np
@@ -165,3 +165,34 @@ def histogram(image: np.ndarray) -> np.ndarray:
     # 根据查找表重映射图像像素值
     color_image = lut[image]
     return color_image
+
+
+def adjust_saturation(image: np.ndarray, alpha: float) -> np.ndarray:
+    """
+    调整图像饱和度.
+
+    核心公式: output = input + alpha * (input - gray)
+    - alpha > 0: 增大色彩偏离灰度中心的幅度, 提升饱和度.
+    - alpha < 0: 减小色彩偏离幅度, 降低饱和度.
+    - alpha = 0: 饱和度不变.
+
+    Args:
+        image: 输入的 BGR 三通道彩色图像.
+        alpha: 饱和度调节因子, 通常取值范围在 -1 到 1 之间.
+
+    Returns:
+        调整饱和度后的图像.
+    """
+    if image.ndim != 3 or image.shape[2] != 3:
+        raise ValueError("饱和度调整仅支持 BGR 三通道彩色图像")
+
+    # 转为浮点防止计算溢出
+    image_float = image.astype(np.float32)
+    # 计算灰度图作为色彩中性基准
+    gray_image = to_grayscale(image_float)
+    # 扩展维度至 (H, W, 1) 以便与 (H, W, 3) 的彩色图逐通道广播
+    gray_image = np.expand_dims(gray_image, axis=2)
+    # 线性调整: 以灰度值为基准, 缩放色彩偏离量
+    adjusted_image = image_float + alpha * (image_float - gray_image)
+
+    return np.clip(adjusted_image, 0, 255).astype(np.uint8)
