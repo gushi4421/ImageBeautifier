@@ -1,6 +1,6 @@
 """
 该模块实现像素级点操作.
-包含灰度化、二值化(含OTSU)、伪彩色映射、对比度调节、亮度调节、饱和度调节以及直方图均衡化.
+包含灰度化、二值化(含OTSU)、伪彩色映射、假彩色增强、对比度调节、亮度调节、饱和度调节以及直方图均衡化.
 """
 
 import numpy as np
@@ -169,7 +169,7 @@ def histogram(image: np.ndarray) -> np.ndarray:
 
 def adjust_saturation(image: np.ndarray, alpha: float) -> np.ndarray:
     """
-    调整图像饱和度.
+    使用线性插值调整图像饱和度.
 
     核心公式: output = input + alpha * (input - gray)
     - alpha > 0: 增大色彩偏离灰度中心的幅度, 提升饱和度.
@@ -196,3 +196,61 @@ def adjust_saturation(image: np.ndarray, alpha: float) -> np.ndarray:
     adjusted_image = image_float + alpha * (image_float - gray_image)
 
     return np.clip(adjusted_image, 0, 255).astype(np.uint8)
+
+def synthesize_false_color_image(bands_list: list[np.ndarray], r_index: int, g_index: int, b_index: int) -> np.ndarray:
+    """
+    通过将特定的多光谱灰度波段绑定到 RGB 通道，合成假彩色图像.
+    
+    Args:
+        bands_list: 输入的单通道灰度波段列表. 每个波段形状为 (H, W), 类型 uint8.
+                    假设列表的索引 0 代表红光(Red), 1 代表绿光(Green), 2 代表蓝光(Blue), 
+                    3 代表近红外(NIR), 4 代表短波红外(SWIR) 等.
+        r_index: 映射到 R 输出通道的波段列表索引.
+        g_index: 映射到 G 输出通道的波段列表索引.
+        b_index: 映射到 B 输出通道的波段列表索引.
+        
+    Returns:
+        假彩色增强后的 RGB 图像, 形状为 (H, W, 3), 类型 uint8.
+    """
+    if len(bands_list) < 3:
+        raise ValueError("合成假彩色至少需要 3 个输入波段.")
+
+    num_bands = len(bands_list)
+    if not (0 <= r_index < num_bands and 0 <= g_index < num_bands and 0 <= b_index < num_bands):
+        raise ValueError("指定的波段索引越界.")
+
+    h, w = bands_list[0].shape
+    color_image = np.zeros((h, w, 3), dtype=np.uint8)
+
+    # 将指定的灰度波段分别赋值到 RGB 三个通道
+    color_image[:, :, 0] = bands_list[r_index]
+    color_image[:, :, 1] = bands_list[g_index]
+    color_image[:, :, 2] = bands_list[b_index]
+
+    return color_image
+
+
+def false_color_channel_swap(
+    image: np.ndarray,
+    r_src: int = 2,
+    g_src: int = 0,
+    b_src: int = 1,
+) -> np.ndarray:
+    """
+    通道置换假彩色增强.
+
+    将 BGR 图像的三通道拆分后按指定顺序重新排列到 RGB, 产生非自然但能突出
+    特定信息的假彩色效果. 默认将 B 通道映射到 G、G 通道映射到 R、R 通道映射到 B.
+
+    Args:
+        image: 输入的 BGR 三通道彩色图像.
+        r_src: 新 R 通道对应原图的通道索引 (0=B, 1=G, 2=R), 默认 2.
+        g_src: 新 G 通道对应原图的通道索引, 默认 0.
+        b_src: 新 B 通道对应原图的通道索引, 默认 1.
+
+    Returns:
+        假彩色增强后的 RGB 图像, 类型 uint8.
+    """
+    # 拆分 BGR 三个通道作为波段列表
+    bands = [image[:, :, i] for i in range(3)]
+    return synthesize_false_color_image(bands, r_src, g_src, b_src)
