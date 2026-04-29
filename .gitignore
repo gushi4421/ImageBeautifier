@@ -3,9 +3,12 @@ ui/
 assets/
 templates/
 *.pyc
+__pycache__/
+*.pth
 test/
 学习笔记.md
 data/
 docs/
 项目设计.md
 .vscode/
+.claude/
