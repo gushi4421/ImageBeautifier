@@ -3,6 +3,7 @@
 包含灰度化、二值化(含OTSU)、伪彩色映射、假彩色增强、对比度调节、亮度调节、饱和度调节以及直方图均衡化.
 """
 
+import cv2 as cv
 import numpy as np
 
 from src.utils import generate_colormap_lut
@@ -234,18 +235,20 @@ def adjust_sharpness(
     return np.clip(sharpened, 0, 255).astype(np.uint8)
 
 
-def synthesize_false_color_image(bands_list: list[np.ndarray], r_index: int, g_index: int, b_index: int) -> np.ndarray:
+def synthesize_false_color_image(
+    bands_list: list[np.ndarray], r_index: int, g_index: int, b_index: int
+) -> np.ndarray:
     """
     通过将特定的多光谱灰度波段绑定到 RGB 通道，合成假彩色图像.
-    
+
     Args:
         bands_list: 输入的单通道灰度波段列表. 每个波段形状为 (H, W), 类型 uint8.
-                    假设列表的索引 0 代表红光(Red), 1 代表绿光(Green), 2 代表蓝光(Blue), 
+                    假设列表的索引 0 代表红光(Red), 1 代表绿光(Green), 2 代表蓝光(Blue),
                     3 代表近红外(NIR), 4 代表短波红外(SWIR) 等.
         r_index: 映射到 R 输出通道的波段列表索引.
         g_index: 映射到 G 输出通道的波段列表索引.
         b_index: 映射到 B 输出通道的波段列表索引.
-        
+
     Returns:
         假彩色增强后的 RGB 图像, 形状为 (H, W, 3), 类型 uint8.
     """
@@ -253,7 +256,11 @@ def synthesize_false_color_image(bands_list: list[np.ndarray], r_index: int, g_i
         raise ValueError("合成假彩色至少需要 3 个输入波段.")
 
     num_bands = len(bands_list)
-    if not (0 <= r_index < num_bands and 0 <= g_index < num_bands and 0 <= b_index < num_bands):
+    if not (
+        0 <= r_index < num_bands
+        and 0 <= g_index < num_bands
+        and 0 <= b_index < num_bands
+    ):
         raise ValueError("指定的波段索引越界.")
 
     h, w = bands_list[0].shape
@@ -274,7 +281,7 @@ def false_color_channel_swap(
     b_src: int = 1,
 ) -> np.ndarray:
     """
-    通道置换假彩色增强.
+    通道置换假彩色增强
 
     将 BGR 图像的三通道拆分后按指定顺序重新排列到 RGB, 产生非自然但能突出
     特定信息的假彩色效果. 默认将 B 通道映射到 G、G 通道映射到 R、R 通道映射到 B.
@@ -291,3 +298,90 @@ def false_color_channel_swap(
     # 拆分 BGR 三个通道作为波段列表
     bands = [image[:, :, i] for i in range(3)]
     return synthesize_false_color_image(bands, r_src, g_src, b_src)
+
+
+# def intelligent_fill_light(
+#     image: np.ndarray,
+#     strength: float = 0.6,
+#     shadow_threshold: float = 0.4,
+# ) -> np.ndarray:
+#     """
+#     智能补光: 自动检测暗区并选择性提亮, 模拟摄影补光效果.
+
+#     算法流程:
+#     1. 将图像从 BGR 转到 HSV, 提取 V 通道并归一化.
+#     2. 使用 sigmoid 函数构建暗区软掩膜 (暗处权重高, 亮处权重低).
+#     3. 对 V 通道做 Gamma 校正 (gamma < 1) 来提亮暗部.
+#     4. 用掩膜将提亮结果与原图混合, 只作用于暗区.
+
+#     Args:
+#         image: 输入的 BGR 三通道彩色图像.
+#         strength: 补光强度, 范围 [0, 1], 0 无变化, 1 最强.
+#         shadow_threshold: 暗区判定阈值, V 通道归一化值低于此值的视为暗区.
+
+#     Returns:
+#         补光后的 BGR 图像, uint8 类型.
+#     """
+#     hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV).astype(np.float32)
+#     v_channel = hsv[:, :, 2] / 255.0
+
+#     # sigmoid 软掩膜: 越暗权重越接近 1
+#     k = 12.0 / (shadow_threshold + 1e-6)
+#     shadow_mask = 1.0 / (1.0 + np.exp(k * (v_channel - shadow_threshold)))
+
+#     # Gamma 校正: gamma < 1 提亮暗部
+#     gamma = 1.0 - 0.5 * strength
+#     gamma = max(gamma, 0.3)
+#     v_brightened = np.power(v_channel, gamma)
+
+#     # 掩膜混合: 暗区用提亮后的 V, 亮区保持原样
+#     v_blended = shadow_mask * v_brightened + (1.0 - shadow_mask) * v_channel
+
+#     hsv[:, :, 2] = np.clip(v_blended * 255.0, 0, 255)
+#     hsv = hsv.astype(np.uint8)
+#     return cv.cvtColor(hsv, cv.COLOR_HSV2BGR)
+
+
+# def adjust_highlight(
+#     image: np.ndarray,
+#     strength: float = 0.5,
+#     highlight_threshold: float = 0.7,
+# ) -> np.ndarray:
+#     """
+#     高光增强: 自动检测高光区域并增强其亮度与通透感.
+
+#     算法流程:
+#     1. 将图像从 BGR 转到 HSV.
+#     2. 结合 V 通道 (亮度) 与 S 通道 (饱和度) 构建高光软掩膜.
+#        - 亮度高且饱和度低的区域判定为高光.
+#     3. 对高光区提升 V 通道值, 模拟光泽感.
+
+#     Args:
+#         image: 输入的 BGR 三通道彩色图像.
+#         strength: 高光增强强度, 范围 [0, 1], 0 无变化.
+#         highlight_threshold: V 通道归一化值高于此值视为潜在高光.
+
+#     Returns:
+#         高光增强后的 BGR 图像, uint8 类型.
+#     """
+#     hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV).astype(np.float32)
+#     v_channel = hsv[:, :, 2] / 255.0
+#     s_channel = hsv[:, :, 1] / 255.0
+
+#     # 亮度掩膜: 亮度越高权重越大
+#     k_v = 15.0
+#     bright_mask = 1.0 / (1.0 + np.exp(-k_v * (v_channel - highlight_threshold)))
+
+#     # 饱和度权重: 低饱和度区域更像高光
+#     sat_weight = 1.0 - np.clip(s_channel / 0.5, 0.0, 1.0)
+
+#     highlight_mask = bright_mask * sat_weight
+
+#     # 高光区亮度提升
+#     v_enhanced = v_channel + strength * (1.0 - v_channel) * v_channel
+
+#     v_blended = highlight_mask * v_enhanced + (1.0 - highlight_mask) * v_channel
+
+#     hsv[:, :, 2] = np.clip(v_blended * 255.0, 0, 255)
+#     hsv = hsv.astype(np.uint8)
+#     return cv.cvtColor(hsv, cv.COLOR_HSV2BGR)

@@ -20,14 +20,15 @@ import math
 
 def translate(image: np.ndarray, tx, ty) -> np.ndarray:
     """
-    图像绕中心点旋转变换.
+    图像平移变换.
 
     Args:
         image: 原始图像.
-        angle: 旋转的角度(角度制), 正值为逆时针旋转.
+        tx: 水平方向平移量 (正值向右).
+        ty: 垂直方向平移量 (正值向下).
 
     Returns:
-        旋转后的图像, 尺寸与原图保持一致.
+        平移后的图像, 尺寸与原图保持一致.
     """
     h, w, _ = image.shape
     target_image = np.zeros_like(image)

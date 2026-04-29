@@ -1,6 +1,6 @@
 """
-该模块提供算法内部使用的工具函数.
-包含高斯卷积核生成、伪彩色查找表生成、图像格式转换以及傅里叶变换工具.
+该模块提供算法内部使用的工具函数
+包含高斯卷积核生成、伪彩色查找表生成、图像格式转换以及傅里叶变换工具
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ def generate_gaussian_kernel(kernel_size: int = 3, sigma: float = 1.0) -> np.nda
     Returns:
         返回形状为 (kernel_size, kernel_size) 的二维浮点矩阵, 且和为 1.
     """
-    if kernel_size % 2 == 0 or kernel_size < 0:
-        raise ValueError()
+    if kernel_size % 2 == 0 or kernel_size <= 0:
+        raise ValueError("kernel_size 必须是大于 0 的奇数")
     kernel = np.zeros((kernel_size, kernel_size), dtype=np.float64)
     radius = kernel_size // 2
     for i in range(kernel_size):
@@ -89,12 +89,18 @@ def to_bgr_numpy(image: Any) -> np.ndarray:
     elif image.ndim == 3 and image.shape[2] == 1:
         image = cv.cvtColor(image, cv.COLOR_GRAY2BGR)
     elif image.ndim == 3 and image.shape[2] == 4:
-        image = image[..., :3]
+        # RGBA numpy: 白色背景融合, 与 PIL RGBA 处理行为一致
+        alpha = image[..., 3:4].astype(np.float32) / 255.0
+        rgb = image[..., :3].astype(np.float32)
+        image = (rgb * alpha + 255.0 * (1 - alpha)).astype(np.uint8)
     elif image.ndim != 3 or image.shape[2] != 3:
         raise ValueError(
             "图片数组必须是形状为 (H, W), (H, W, 1), (H, W, 3) 或 (H, W, 4) 的数组."
         )
 
+    # 已经是标准 BGR uint8 三通道格式, 无需拷贝
+    if image.ndim == 3 and image.shape[2] == 3 and image.dtype == np.uint8:
+        return image
     return image.copy()
 
 

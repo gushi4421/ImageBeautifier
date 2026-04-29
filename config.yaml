@@ -1,0 +1,11 @@
+# 图像美化系统 — 统一配置文件
+# 所有输出目录（不含图片名称）均在此集中管理
+
+output:
+  noise: "data/noise"
+  filter: "data/filter"
+  artistic: "data/artistic"
+  frequency: "data/frequency"
+  tone: "data/tone"
+  geometry: "data/geometry"
+  stitching: "data/stitching"

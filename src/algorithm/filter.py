@@ -146,4 +146,4 @@ def bilateral_filter_manual(
             combined_weight /= np.sum(combined_weight, axis=(0, 1), keepdims=True)
             filtered_image[v, u] = np.sum(window * combined_weight, axis=(0, 1))
 
-    return np.clip(filtered_image.astype(np.uint8), 0, 255)
+    return np.clip(filtered_image, 0, 255).astype(np.uint8)
