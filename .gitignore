@@ -1,7 +1,5 @@
-web/
 ui/
 assets/
-templates/
 *.pyc
 __pycache__/
 *.pth

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ImageBeautifier - 图像美化系统</title>
+    <!-- 引入自定义样式 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* 调整画布居中与图片自适应大小 */
+        .canvas-wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            padding: 20px;
+        }
+        #mainCanvasImage {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 6px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            transition: opacity 0.2s;
+        }
+
+        /* 工具组折叠面板样式 */
+        .tool-group-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: var(--text-light);
+            transition: background 0.2s;
+        }
+        .tool-group-title:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .tool-group-title .chevron {
+            transition: transform 0.3s ease;
+        }
+        .tool-group.collapsed .chevron {
+            transform: rotate(-90deg);
+        }
+        .tool-group-content {
+            padding-left: 4px;
+            padding-right: 4px;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        .tool-group.collapsed .tool-group-content {
+            max-height: 0 !important;
+            padding-top: 0;
+            padding-bottom: 0;
+        }
+    </style>
+</head>
+<body>
+
+<!-- 类似PS的顶部工具栏 -->
+<header class="topbar">
+    <div class="topbar-brand">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+        ImageBeautifier
+    </div>
+    <div class="topbar-actions">
+        <button id="btnImportFolder" class="btn-icon" onclick="document.getElementById('folderInput').click()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            导入文件夹
+        </button>
+        <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none">
+
+        <button id="btnBatchProcess" class="btn-icon" style="background:var(--accent); color:var(--text-light); border:none; display:none;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            应用到所有并下载
+        </button>
+
+        <button id="btnUndo" class="btn-icon" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path></svg>
+            撤销 (Undo)
+        </button>
+        <button id="btnReset" class="btn-icon" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+             恢复原图
+        </button>
+        <a id="btnExport" class="btn-icon" style="text-decoration:none; background:var(--accent); color:white; border-color:var(--accent);" download="edited_image.png">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            导出图像
+        </a>
+    </div>
+</header>
+
+<div class="workspace-layout">
+        
+    <!-- 左侧：工具栏 (如PS的左侧列) -->
+    <aside class="sidebar sidebar-left" style="overflow-y: auto;">
+        <div class="panel-header">功能箱</div>
+        <div class="panel-content">
+            <div class="tool-group">
+                <div class="tool-group-title" onclick="toggleGroup(this)">
+                    <span>滤镜与增强</span>
+                    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="tool-group-content">
+                    <div class="tool-item active" data-action="mean_filter">均值滤波 (平滑)</div>
+                    <div class="tool-item" data-action="median_filter">中值滤波 (去噪)</div>
+                    <div class="tool-item" data-action="gaussian_blurring">高斯模糊</div>
+                    <div class="tool-item" data-action="bilateral_filter">双边滤波 (边缘保持平滑)</div>
+                    <div class="tool-item" data-action="adjust_sharpness">USM 锐化处理</div>
+                    <div class="tool-item" data-action="emboss">浮雕石刻特效</div>
+                    <div class="tool-item" data-action="frosted">毛玻璃特效</div>
+                    <div class="tool-item" data-action="add_noise_gaussian">添加高斯噪声</div>
+                    <div class="tool-item" data-action="add_noise_salt_pepper">添加椒盐噪声</div>
+                </div>
+            </div>
+            
+            <div class="tool-group">
+                <div class="tool-group-title" onclick="toggleGroup(this)">
+                    <span>频域处理</span>
+                    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="tool-group-content">
+                    <div class="tool-item" data-action="lowpass_filter">低通滤波 (模糊)</div>
+                    <div class="tool-item" data-action="highpass_filter">高通滤波 (锐化)</div>
+                    <div class="tool-item" data-action="bandpass_filter">带通滤波</div>
+                    <div class="tool-item" data-action="bandreject_filter">带阻滤波</div>
+                </div>
+            </div>
+
+            <div class="tool-group">
+                <div class="tool-group-title" onclick="toggleGroup(this)">
+                    <span>几何变换</span>
+                    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="tool-group-content">
+                    <div class="tool-item" data-action="rotate">图像旋转</div>
+                    <div class="tool-item" data-action="translate">图像平移</div>
+                    <div class="tool-item" data-action="zoom">图像缩放</div>
+                    <div class="tool-item" data-action="flip">水平翻转</div>
+                    <div class="tool-item" data-action="shear">图像裁剪</div>
+                    <div class="tool-item" data-action="add_border">给照片加画框</div>
+                </div>
+            </div>
+
+            <div class="tool-group">
+                <div class="tool-group-title" onclick="toggleGroup(this)">
+                    <span>多图操作与合成</span>
+                    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="tool-group-content">
+                    <div class="tool-item" data-action="horizontal_collage">水平拼接 (并排)</div>
+                    <div class="tool-item" data-action="vertical_collage">垂直拼接 (上下)</div>
+                    <div class="tool-item" data-action="stitch_images">AI 全景无缝拼接</div>
+                </div>
+            </div>
+            
+            <div class="tool-group">
+                <div class="tool-group-title" onclick="toggleGroup(this)">
+                    <span>点操作调色</span>
+                    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="tool-group-content">
+                    <div class="tool-item" data-action="to_grayscale">黑白灰度化</div>
+                    <div class="tool-item" data-action="otsu_binarize">OTSU 智能二值化</div>
+                    <div class="tool-item" data-action="binarize">固定阈值二值化</div>
+                    <div class="tool-item" data-action="apply_colormap">伪彩色映射</div>
+                    <div class="tool-item" data-action="false_color_channel_swap">通道置换假彩色</div>
+                    <div class="tool-item" data-action="synthesize_false_color_image">多光谱假彩色合成</div>
+                    <div class="tool-item" data-action="adjust_brightness">调节亮度</div>
+                    <div class="tool-item" data-action="adjust_contrast">调节对比度</div>
+                    <div class="tool-item" data-action="adjust_saturation">调节饱和度</div>
+                    <div class="tool-item" data-action="histogram_eq">直方图均衡化</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 中间：核心工作区/画板区域 (如PS中间大图画板) -->
+    <main class="canvas-area" id="dropzone">
+        <div class="upload-overlay" id="uploadOverlay">
+            <svg style="color:var(--accent); margin-bottom:10px" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <div style="font-size:1rem; font-weight:600; color:#fff">导入/打开新文件</div>
+            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:5px">点击或直接拖拽图片至画板区</div>
+            <input type="file" id="imageInput" accept="image/*">
+        </div>
+        
+        <div class="canvas-wrapper" id="canvasWrapper" style="display:none;">
+            <img id="mainCanvasImage" src="" alt="Canvas">
+        </div>
+    </main>
+
+    <!-- 右侧：参数属性与历史栈 (类似PS图层/属性栏) -->
+    <aside class="sidebar sidebar-right">
+        <div class="panel-header">属性与参数</div>
+        <div class="panel-content">
+            
+            <!-- 动态参数表单 -->
+            <div id="paramContainer">
+                <div class="control-group">
+                    <label>卷积核大小 <span class="param-value" id="kernelVal">3 px</span></label>
+                    <input type="range" id="param_kernel_size" min="3" max="15" step="2" value="3" oninput="document.getElementById('kernelVal').innerText=this.value+' px'">
+                </div>
+            </div>
+
+            <button id="processBtn" class="primary-btn" disabled>
+                 确认应用此调整
+            </button>
+
+            <!-- 历史记录栈用来体现我们的串联批处理能力 -->
+            <div class="history-list" id="historyList">
+                <div class="panel-header" style="border:none; padding:0 0 10px 0; background:none;">编辑历史 (History)</div>
+                <!-- 动态生成 -->
+            </div>
+            
+        </div>
+    </aside>
+
+</div>
+
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/uiParamLoader.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+    function toggleGroup(el) {
+        const group = el.closest('.tool-group');
+        const content = group.querySelector('.tool-group-content');
+        
+        if (group.classList.contains('collapsed')) {
+            group.classList.remove('collapsed');
+            content.style.maxHeight = content.scrollHeight + "px";
+        } else {
+            content.style.maxHeight = content.scrollHeight + "px"; // 设置显式高度用于过渡动画
+            setTimeout(() => {
+                group.classList.add('collapsed');
+            }, 10); // 延迟应用类以触发动画
+        }
+    }
+    
+    // 初始化所有分组的内容高度
+    document.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll('.tool-group').forEach(group => {
+            const content = group.querySelector('.tool-group-content');
+            content.style.maxHeight = content.scrollHeight + "px";
+        });
+    });
+</script>
+</body>
+</html>
