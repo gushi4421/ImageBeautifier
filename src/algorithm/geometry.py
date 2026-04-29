@@ -8,6 +8,10 @@
 3. 缩放 (Zoom) - 含双线性插值
 4. 翻转 (Flip)
 5. 剪切 (Shear)
+6. 加框 (AddBorder) - 将照片嵌入画框模板
+7. 拼图 (Collage) - 将多张图片按行列网格排列
+8. 水平拼接 (HConcat) - 将两张图片水平拼接
+9. 垂直拼接 (VConcat) - 将两张图片垂直拼接
 """
 
 import numpy as np
@@ -196,3 +200,138 @@ def shear(image: np.ndarray, start_x, end_x, start_y, end_y):
             target_image[v - start_y, u - start_x] = image[v, u]
 
     return target_image
+
+
+def add_border(
+    image: np.ndarray,
+    frame: np.ndarray,
+    scale: float = 0.1,
+    offset: tuple[float, float] = (0.0, 0.0),
+) -> np.ndarray:
+    """
+    将图片嵌入画框模板, 实现加框特效.
+
+    画框模板作为基准, 原图按 scale 缩放嵌入画框内侧并居中放置,
+    通过 offset 微调位置.
+
+    Args:
+        image: 用户的照片, 形状为 (H, W, C).
+        frame: 画框背景模板, 形状通常大于 image.
+        scale: 原图与画框内缩区域之间最短边的间隙比例 (0~1).
+               0 表示最短边完全贴合画框, 值越大露出的画框区域越多.
+        offset: 原图在内缩区域中的位置偏移量 (x, y), 取值范围 [-1, 1].
+                (0, 0) 为居中, (1, 1) 紧贴左上角, (-1, -1) 紧贴右下角.
+
+    Returns:
+        合成后的加框图像.
+    """
+    if image.ndim != 3 or frame.ndim != 3:
+        raise ValueError("仅支持三通道彩色图像进行加框合成")
+    if scale < 0 or scale > 1:
+        raise ValueError("scale 必须在 0 到 1 之间")
+
+    f_h, f_w, _ = frame.shape
+    i_h, i_w, _ = image.shape
+    offset_x, offset_y = offset
+
+    # 第一步: 根据 scale 计算间隙. 作用于画框较短边, 保证四个方向间隙一致
+    gap = int(scale * min(f_h, f_w))
+
+    # 第二步: 计算内缩后的可用嵌入区域
+    inner_h = f_h - 2 * gap
+    inner_w = f_w - 2 * gap
+
+    # 第三步: 等比缩放照片, 使其刚好被内缩区域包住 (保持宽高比, 不变形)
+    ratio = min(inner_w / i_w, inner_h / i_h)
+    new_w = int(i_w * ratio)
+    new_h = int(i_h * ratio)
+    resized = zoom(image, new_w / i_w, new_h / i_h)
+
+    # 第四步: 计算缩放后照片在内缩区域中的 slack 余量
+    slack_x = inner_w - new_w
+    slack_y = inner_h - new_h
+
+    # 第五步: 根据 offset 分配 slack. offset ∈ [-1, 1]
+    # 1 → 紧贴左/上, 0 → 居中, -1 → 紧贴右/下
+    x = gap + int((1 - offset_x) / 2 * slack_x)
+    y = gap + int((1 - offset_y) / 2 * slack_y)
+
+    # 第六步: 将缩放后的照片嵌入画框副本
+    canvas = frame.copy()
+    canvas[y : y + new_h, x : x + new_w] = resized
+
+    return canvas
+
+
+def horizontal_collage(
+    image1: np.ndarray, image2: np.ndarray, gap: int = 0
+) -> np.ndarray:
+    """
+    水平拼接两张图像.
+
+    两张图像垂直居中对齐, 尺寸不一致的区域以及间隙填充白色(255, 255, 255).
+
+    Args:
+        image1: 第一张图像.
+        image2: 第二张图像.
+        gap: 两张图像之间的间隙大小(像素), 默认为0.
+
+    Returns:
+        水平拼接后的图像.
+    """
+    h1, w1, _ = image1.shape
+    h2, w2, _ = image2.shape
+
+    new_h = max(h1, h2)
+    new_w = w1 + gap + w2
+
+    target = np.full((new_h, new_w, 3), 255, dtype=np.uint8)
+
+    y1 = (new_h - h1) // 2
+    for u in range(w1):
+        for v in range(h1):
+            target[y1 + v, u] = image1[v, u]
+
+    y2 = (new_h - h2) // 2
+    for u in range(w2):
+        for v in range(h2):
+            target[y2 + v, w1 + gap + u] = image2[v, u]
+
+    return target
+
+
+def vertical_collage(
+    image1: np.ndarray, image2: np.ndarray, gap: int = 0
+) -> np.ndarray:
+    """
+    垂直拼接两张图像.
+
+    两张图像水平居中对齐, 尺寸不一致的区域以及间隙填充白色(255, 255, 255).
+
+    Args:
+        image1: 第一张图像.
+        image2: 第二张图像.
+        gap: 两张图像之间的间隙大小(像素), 默认为0.
+
+    Returns:
+        垂直拼接后的图像.
+    """
+    h1, w1, _ = image1.shape
+    h2, w2, _ = image2.shape
+
+    new_h = h1 + gap + h2
+    new_w = max(w1, w2)
+
+    target = np.full((new_h, new_w, 3), 255, dtype=np.uint8)
+
+    x1 = (new_w - w1) // 2
+    for u in range(w1):
+        for v in range(h1):
+            target[v, x1 + u] = image1[v, u]
+
+    x2 = (new_w - w2) // 2
+    for u in range(w2):
+        for v in range(h2):
+            target[h1 + gap + v, x2 + u] = image2[v, u]
+
+    return target
