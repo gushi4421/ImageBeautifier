@@ -34,14 +34,17 @@ def to_grayscale(image: np.ndarray) -> np.ndarray:
 def binarize(image: np.ndarray, threshold: int = 127) -> np.ndarray:
     """
     对图像进行简单固定阈值二值化处理.
+    若输入为彩色图, 自动转为灰度图再处理.
 
     Args:
-        image: 输入的灰度图像.
+        image: 输入的灰度图像或 BGR 彩色图像.
         threshold: 设定的分割阈值, 默认为 127.
 
     Returns:
         二值化后的图像, 像素值仅包含 0 和 255.
     """
+    if image.ndim == 3:
+        image = to_grayscale(image)
     binary_image = np.zeros_like(image)
     # 大于阈值的像素点设置为白色(255)
     binary_image[image > threshold] = 255
@@ -51,13 +54,16 @@ def binarize(image: np.ndarray, threshold: int = 127) -> np.ndarray:
 def otsu_binarize(image: np.ndarray) -> np.ndarray:
     """
     OTSU自动阈值二值化算法实现.
+    若输入为彩色图, 自动转为灰度图再处理.
 
     Args:
-        image: 输入的待处理灰度图像.
+        image: 输入的待处理灰度图像或 BGR 彩色图像.
 
     Returns:
         使用自动阈值分割后的二值图像.
     """
+    if image.ndim == 3:
+        image = to_grayscale(image)
     total_pixels = image.size
     histogram = np.bincount(image.ravel(), minlength=256)
     probabilities = histogram / total_pixels
@@ -196,6 +202,37 @@ def adjust_saturation(image: np.ndarray, alpha: float) -> np.ndarray:
     adjusted_image = image_float + alpha * (image_float - gray_image)
 
     return np.clip(adjusted_image, 0, 255).astype(np.uint8)
+
+
+def adjust_sharpness(
+    image: np.ndarray, amount: float = 1.0, radius: int = 3, sigma: float = 1.0
+) -> np.ndarray:
+    """
+    使用 Unsharp Masking (USM) 算法调整图像清晰度.
+
+    原理: output = image + amount * (image - blurred)
+    - 先对原图做高斯模糊得到平滑层
+    - 原图减去平滑层得到细节层 (高频信息)
+    - 将细节层按 amount 强度叠加回原图
+
+    Args:
+        image: 输入图像, BGR 三通道.
+        amount: 锐化强度, 0 无变化, 1.0 中等, 更大值更锐利.
+        radius: 高斯模糊核大小, 控制细节提取尺度, 建议 3~7.
+        sigma: 高斯模糊标准差, 越大细节提取越粗.
+
+    Returns:
+        锐化后的图像, uint8 类型.
+    """
+    from src.algorithm.filter import gaussian_blurring
+
+    image_float = image.astype(np.float32)
+    blurred = gaussian_blurring(image, kernel_size=radius, sigma=sigma).astype(
+        np.float32
+    )
+    sharpened = image_float + amount * (image_float - blurred)
+    return np.clip(sharpened, 0, 255).astype(np.uint8)
+
 
 def synthesize_false_color_image(bands_list: list[np.ndarray], r_index: int, g_index: int, b_index: int) -> np.ndarray:
     """
