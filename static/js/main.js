@@ -1,5 +1,6 @@
 // 全局历史状态 (核心重构点)
 let currentAction = 'mean_filter';
+let videoAction = null;
 let imageHistory = []; // 保存每一层状态: { img, tool, action, params, paramDesc }
 let currentStep = -1;  // 当前所处的历史版本指针
 
@@ -117,6 +118,7 @@ toolItems.forEach(item => {
         toolItems.forEach(i => i.classList.remove('active'));
         item.classList.add('active');
         currentAction = item.dataset.action;
+        videoAction = item.dataset.action;
         renderParams(currentAction); // 取自 uiParamLoader.js
     });
 });

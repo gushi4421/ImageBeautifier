@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ImageBeautifier - 图像美化系统</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='photo-edit.svg') }}">
     <!-- 引入自定义样式 -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
@@ -67,10 +68,21 @@
 <!-- 类似PS的顶部工具栏 -->
 <header class="topbar">
     <div class="topbar-brand">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
-        ImageBeautifier
+        <img src="{{ url_for('static', filename='photo-edit.svg') }}" width="24" height="24" alt="logo" style="margin-right: 8px;">
+        图像美化系统
     </div>
     <div class="topbar-actions">
+        <button id="btnCameraMode" class="btn-icon">
+             实时特效(摄像头)
+        </button>
+        <button id="btnVideoImport" class="btn-icon" onclick="document.getElementById('videoInput').click()">
+             导入视频
+        </button>
+        <button id="btnStopVideo" class="btn-icon" style="display:none; color:white; background:#e74c3c;">
+             停止流
+        </button>
+        <input type="file" id="videoInput" accept="video/*" style="display:none;">
+
         <button id="btnImportFolder" class="btn-icon" onclick="document.getElementById('folderInput').click()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
             导入文件夹
@@ -105,30 +117,43 @@
         <div class="panel-content">
             <div class="tool-group">
                 <div class="tool-group-title" onclick="toggleGroup(this)">
-                    <span>滤镜与增强</span>
+                    <span>一、基础调色</span>
                     <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
                 <div class="tool-group-content">
-                    <div class="tool-item active" data-action="mean_filter">均值滤波 (平滑)</div>
-                    <div class="tool-item" data-action="median_filter">中值滤波 (去噪)</div>
-                    <div class="tool-item" data-action="gaussian_blurring">高斯模糊</div>
-                    <div class="tool-item" data-action="bilateral_filter">双边滤波 (边缘保持平滑)</div>
-                    <div class="tool-item" data-action="adjust_sharpness">USM 锐化处理</div>
-                    <div class="tool-item" data-action="emboss">浮雕石刻特效</div>
-                    <div class="tool-item" data-action="frosted">毛玻璃特效</div>
-                    <div class="tool-item" data-action="add_noise_gaussian">添加高斯噪声</div>
-                    <div class="tool-item" data-action="add_noise_salt_pepper">添加椒盐噪声</div>
+                    <div class="tool-item" data-action="adjust_brightness">调节亮度</div>
+                    <div class="tool-item" data-action="adjust_contrast">调节对比度</div>
+                    <div class="tool-item" data-action="adjust_saturation">调节饱和度</div>
+                    <div class="tool-item" data-action="histogram_eq">直方图均衡化</div>
+                    <div class="tool-item" data-action="apply_curve">曲线调整(预设)</div>
                 </div>
             </div>
             
             <div class="tool-group">
                 <div class="tool-group-title" onclick="toggleGroup(this)">
-                    <span>频域处理</span>
+                    <span>二、色彩转换</span>
                     <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
                 <div class="tool-group-content">
-                    <div class="tool-item" data-action="lowpass_filter">低通滤波 (模糊)</div>
-                    <div class="tool-item" data-action="highpass_filter">高通滤波 (锐化)</div>
+                    <div class="tool-item" data-action="to_grayscale">黑白灰度化</div>
+                    <div class="tool-item" data-action="binarize">固定阈值二值化</div>
+                    <div class="tool-item" data-action="apply_colormap">伪彩色映射</div>
+                    <div class="tool-item" data-action="synthesize_false_color_image">多光谱假彩色合成</div>
+                    <div class="tool-item" data-action="false_color_channel_swap">通道置换假彩色</div>
+                </div>
+            </div>
+
+            <div class="tool-group">
+                <div class="tool-group-title" onclick="toggleGroup(this)">
+                    <span>三、图像滤波</span>
+                    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="tool-group-content">
+                    <div class="tool-item active" data-action="mean_filter">均值滤波</div>
+                    <div class="tool-item" data-action="median_filter">中值滤波</div>
+                    <div class="tool-item" data-action="gaussian_blurring">高斯模糊</div>
+                    <div class="tool-item" data-action="lowpass_filter">低通滤波</div>
+                    <div class="tool-item" data-action="highpass_filter">高通滤波</div>
                     <div class="tool-item" data-action="bandpass_filter">带通滤波</div>
                     <div class="tool-item" data-action="bandreject_filter">带阻滤波</div>
                 </div>
@@ -136,7 +161,46 @@
 
             <div class="tool-group">
                 <div class="tool-group-title" onclick="toggleGroup(this)">
-                    <span>几何变换</span>
+                    <span>四、噪点与锐化</span>
+                    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="tool-group-content">
+                    <div class="tool-item" data-action="add_noise_gaussian">添加高斯噪声</div>
+                    <div class="tool-item" data-action="add_noise_salt_pepper">添加椒盐噪声</div>
+                    <div class="tool-item" data-action="add_salt_pepper_noise_optimized">椒盐噪声(优化版)</div>
+                    <div class="tool-item" data-action="adjust_sharpness">USM 锐化</div>
+                </div>
+            </div>
+
+            <div class="tool-group">
+                <div class="tool-group-title" onclick="toggleGroup(this)">
+                    <span>五、智能增强</span>
+                    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="tool-group-content">
+                    <div class="tool-item" data-action="otsu_binarize">OTSU 智能二值化</div>
+                    <div class="tool-item" data-action="bilateral_filter">双边滤波</div>
+                    <div class="tool-item" data-action="smart_sharpen">智能边缘锐化</div>
+                    <div class="tool-item" data-action="intelligent_fill_light">智能暗部补光</div>
+                    <div class="tool-item" data-action="adjust_highlight">高光清透增强</div>
+                </div>
+            </div>
+
+            <div class="tool-group">
+                <div class="tool-group-title" onclick="toggleGroup(this)">
+                    <span>六、艺术特效</span>
+                    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="tool-group-content">
+                    <div class="tool-item" data-action="emboss">浮雕效果</div>
+                    <div class="tool-item" data-action="frosted">毛玻璃效果</div>
+                    <div class="tool-item" data-action="create_reflection">生成水面倒影</div>
+                </div>
+            </div>
+
+            <div class="tool-group">
+                <div class="tool-group-title" onclick="toggleGroup(this)">
+                    <span>七、几何变换</span>
                     <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
                 <div class="tool-group-content">
@@ -145,38 +209,32 @@
                     <div class="tool-item" data-action="zoom">图像缩放</div>
                     <div class="tool-item" data-action="flip">水平翻转</div>
                     <div class="tool-item" data-action="shear">图像裁剪</div>
-                    <div class="tool-item" data-action="add_border">给照片加画框</div>
+                    <div class="tool-item" data-action="add_border">照片加画框</div>
                 </div>
             </div>
 
             <div class="tool-group">
                 <div class="tool-group-title" onclick="toggleGroup(this)">
-                    <span>多图操作与合成</span>
+                    <span>八、图像拼接</span>
                     <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
                 <div class="tool-group-content">
-                    <div class="tool-item" data-action="horizontal_collage">水平拼接 (并排)</div>
-                    <div class="tool-item" data-action="vertical_collage">垂直拼接 (上下)</div>
+                    <div class="tool-item" data-action="horizontal_collage">水平拼接</div>
+                    <div class="tool-item" data-action="vertical_collage">垂直拼接</div>
+                    <div class="tool-item" data-action="stitch_images_classic">特征拼接(经典)</div>
                     <div class="tool-item" data-action="stitch_images">AI 全景无缝拼接</div>
                 </div>
             </div>
-            
+
             <div class="tool-group">
                 <div class="tool-group-title" onclick="toggleGroup(this)">
-                    <span>点操作调色</span>
+                    <span>九、AI 增强</span>
                     <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
                 <div class="tool-group-content">
-                    <div class="tool-item" data-action="to_grayscale">黑白灰度化</div>
-                    <div class="tool-item" data-action="otsu_binarize">OTSU 智能二值化</div>
-                    <div class="tool-item" data-action="binarize">固定阈值二值化</div>
-                    <div class="tool-item" data-action="apply_colormap">伪彩色映射</div>
-                    <div class="tool-item" data-action="false_color_channel_swap">通道置换假彩色</div>
-                    <div class="tool-item" data-action="synthesize_false_color_image">多光谱假彩色合成</div>
-                    <div class="tool-item" data-action="adjust_brightness">调节亮度</div>
-                    <div class="tool-item" data-action="adjust_contrast">调节对比度</div>
-                    <div class="tool-item" data-action="adjust_saturation">调节饱和度</div>
-                    <div class="tool-item" data-action="histogram_eq">直方图均衡化</div>
+                    <div class="tool-item" data-action="super_resolve">超分辨率(4x)</div>
+                    <div class="tool-item" data-action="restore_old_photo">照片修复复原</div>
+                    <div class="tool-item" data-action="stylize">NST风格迁移</div>
                 </div>
             </div>
         </div>
@@ -248,6 +306,130 @@
         document.querySelectorAll('.tool-group').forEach(group => {
             const content = group.querySelector('.tool-group-content');
             content.style.maxHeight = content.scrollHeight + "px";
+        });
+    });
+
+    // ====== 视频与流媒体处理逻辑 ======
+    window.isVideoMode = false;
+    const btnCameraMode = document.getElementById('btnCameraMode');
+    const btnVideoImport = document.getElementById('btnVideoImport');
+    const btnStopVideo = document.getElementById('btnStopVideo');
+    const videoInput = document.getElementById('videoInput');
+
+    function updateVideoConfig() {
+        if (!window.isVideoMode) return;
+        const activeVideoAction = typeof videoAction !== 'undefined' ? videoAction : null;
+        const paramData = activeVideoAction ? collectParams(activeVideoAction) : { params: {} };
+        fetch('/api/set_video_config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                action: activeVideoAction,
+                params: paramData.params
+            })
+        });
+    }
+
+    // 监听实时操作
+    document.addEventListener('input', (e) => { if (window.isVideoMode) updateVideoConfig(); });
+    document.addEventListener('change', (e) => { if (window.isVideoMode) updateVideoConfig(); });
+    document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('tool-item')) {
+            setTimeout(() => { if (window.isVideoMode) updateVideoConfig(); }, 50);
+        }
+    });
+
+    // Add loop trigger for WebView2
+    function loopVideoSnapshot() {
+        if (!window.isVideoMode) return;
+        fetch('/api/video_snapshot')
+            .then(response => {
+                if(!response.ok) throw new Error('stopped');
+                return response.blob();
+            })
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                const oldSrc = mainCanvasImage.src;
+                mainCanvasImage.src = url;
+                mainCanvasImage.onload = () => {
+                    URL.revokeObjectURL(oldSrc);
+                    // Add a tiny delay to prevent overwhelming the Flask server thread
+                    setTimeout(() => requestAnimationFrame(loopVideoSnapshot), 30);
+                };
+            })
+            .catch(() => {
+                if (window.isVideoMode) setTimeout(loopVideoSnapshot, 100);
+            });
+    }
+
+    function startVideoStream() {
+        window.isVideoMode = true;
+        if (typeof videoAction !== 'undefined') {
+            videoAction = null;
+        }
+        uploadOverlay.style.display = 'none';
+        canvasWrapper.style.display = 'flex';
+        btnStopVideo.style.display = 'inline-flex';
+        
+        // Disable image processing UI
+        document.getElementById('processBtn').disabled = true;
+        
+        updateVideoConfig();
+        loopVideoSnapshot();
+    }
+
+    btnCameraMode.addEventListener('click', () => {
+        btnCameraMode.disabled = true;
+        btnCameraMode.innerText = '⏳ 正在打开摄像头...';
+        fetch('/api/set_camera', { method: 'POST' })
+            .then(r => r.json())
+            .then(res => {
+                btnCameraMode.disabled = false;
+                btnCameraMode.innerText = '实时特效(摄像头)';
+                if (res.success) {
+                    startVideoStream();
+                } else {
+                    alert('无法打开摄像头：' + (res.error || '未知错误'));
+                }
+            })
+            .catch(() => {
+                btnCameraMode.disabled = false;
+                btnCameraMode.innerText = '实时特效(摄像头)';
+                alert('无法连接服务器，请检查服务是否正常运行');
+            });
+    });
+
+    videoInput.addEventListener('change', function() {
+        if (!this.files.length) return;
+        const formData = new FormData();
+        formData.append('video', this.files[0]);
+        btnVideoImport.innerText = "⏳ 导入中...";
+        
+        fetch('/api/upload_video', {
+            method: 'POST',
+            body: formData
+        }).then(r => r.json()).then(res => {
+            btnVideoImport.innerHTML = "🎬 导入视频";
+            this.value = ''; // clear
+            if (res.success) startVideoStream();
+        });
+    });
+
+    btnStopVideo.addEventListener('click', () => {
+        fetch('/api/stop_video', { method: 'POST' }).then(() => {
+            window.isVideoMode = false;
+            if (typeof videoAction !== 'undefined') {
+                videoAction = null;
+            }
+            btnStopVideo.style.display = 'none';
+            // 恢复图片
+            if (typeof imageHistory !== 'undefined' && currentStep >= 0) {
+                mainCanvasImage.src = imageHistory[currentStep].img;
+                document.getElementById('processBtn').disabled = false;
+            } else {
+                canvasWrapper.style.display = 'none';
+                uploadOverlay.style.display = 'flex';
+            }
         });
     });
 </script>

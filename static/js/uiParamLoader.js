@@ -80,16 +80,52 @@ function renderParams(action) {
         case 'horizontal_collage':
         case 'vertical_collage':
         case 'stitch_images':
+        case 'stitch_images_classic':
             html = `<div class="control-group">
                     <label>第二张图像 (必选)</label>
                     <input type="file" id="param_second_image" accept="image/*" style="display:block; margin-top:8px;">
                 </div>`;
-            if (action !== 'stitch_images') {
+            if (action !== 'stitch_images' && action !== 'stitch_images_classic') {
                 html += `<div class="control-group">
                     <label>拼图间隙 <span class="param-value" id="gapVal">0 px</span></label>
                     <input type="range" id="param_gap" min="0" max="50" step="1" value="0" oninput="document.getElementById('gapVal').innerText=this.value+' px'">
                 </div>`;
             }
+            break;
+        case 'create_reflection':
+            html = `<div class="control-group">
+                    <label>倒影长度比例 <span class="param-value" id="rrVal">0.5</span></label>
+                    <input type="range" id="param_reflection_ratio" min="0.1" max="1.0" step="0.1" value="0.5" oninput="document.getElementById('rrVal').innerText=this.value">
+                </div>
+                <div class="control-group">
+                    <label>渐变衰减度 <span class="param-value" id="feVal">1.5</span></label>
+                    <input type="range" id="param_fade_exponent" min="0.5" max="3.0" step="0.1" value="1.5" oninput="document.getElementById('feVal').innerText=this.value">
+                </div>`;
+            break;
+        case 'super_resolve':
+            html = `<div class="control-group" style="padding-bottom: 10px;">
+                    <label><input type="checkbox" id="param_denoise" checked> 预处理双边滤波(防噪点放大)</label>
+                </div>
+                <div class="control-group">
+                    <label><input type="checkbox" id="param_sharpen" checked> 后处理USM锐化(增强边缘)</label>
+                </div>`;
+            break;
+        case 'restore_old_photo':
+            html = `<div class="control-group" style="padding-bottom: 8px;">
+                    <label><input type="checkbox" id="param_inpaint" checked> 识别并修补划痕(Inpaint)</label>
+                </div>
+                <div class="control-group" style="padding-bottom: 8px;">
+                    <label><input type="checkbox" id="param_denoise" checked> 非局部均值平滑降噪</label>
+                </div>
+                <div class="control-group" style="padding-bottom: 8px;">
+                    <label><input type="checkbox" id="param_contrast" checked> CLAHE 自适应对比度增强</label>
+                </div>
+                <div class="control-group" style="padding-bottom: 8px;">
+                    <label><input type="checkbox" id="param_dehaze"> 褪色/暗通道去雾</label>
+                </div>
+                <div class="control-group">
+                    <label><input type="checkbox" id="param_sharpen" checked> USM 微锐化提取边缘</label>
+                </div>`;
             break;
         case 'lowpass_filter':
         case 'highpass_filter':
@@ -164,6 +200,64 @@ function renderParams(action) {
                 <div class="control-group">
                     <label>B通道 选源 <span class="param-value" id="bsrcVal">1(G)</span></label>
                     <input type="range" id="param_b_src" min="0" max="2" step="1" value="1" oninput="document.getElementById('bsrcVal').innerText=this.value==0?'0(B)':(this.value==1?'1(G)':'2(R)')">
+                </div>`;
+            break;
+        case 'intelligent_fill_light':
+            html = `<div class="control-group">
+                    <label>补光强度 <span class="param-value" id="iflStrVal">0.6</span></label>
+                    <input type="range" id="param_ifl_strength" min="0.1" max="1.0" step="0.1" value="0.6" oninput="document.getElementById('iflStrVal').innerText=this.value">
+                </div>
+                <div class="control-group">
+                    <label>暗区阈值 <span class="param-value" id="iflThreshVal">0.4</span></label>
+                    <input type="range" id="param_ifl_threshold" min="0.1" max="0.9" step="0.1" value="0.4" oninput="document.getElementById('iflThreshVal').innerText=this.value">
+                </div>`;
+            break;
+        case 'adjust_highlight':
+            html = `<div class="control-group">
+                    <label>增强强度 <span class="param-value" id="ahStrVal">0.5</span></label>
+                    <input type="range" id="param_ah_strength" min="0.1" max="1.0" step="0.1" value="0.5" oninput="document.getElementById('ahStrVal').innerText=this.value">
+                </div>
+                <div class="control-group">
+                    <label>高光阈值 <span class="param-value" id="ahThreshVal">0.7</span></label>
+                    <input type="range" id="param_ah_threshold" min="0.5" max="0.95" step="0.05" value="0.7" oninput="document.getElementById('ahThreshVal').innerText=this.value">
+                </div>`;
+            break;
+        case 'add_salt_pepper_noise_optimized':
+            html = `<div class="control-group">
+                    <label>噪声比例 <span class="param-value" id="spopProbVal">0.05</span></label>
+                    <input type="range" id="param_spop_prob" min="0.01" max="0.2" step="0.01" value="0.05" oninput="document.getElementById('spopProbVal').innerText=this.value">
+                </div>`;
+            break;
+        case 'smart_sharpen':
+            html = `<div class="control-group">
+                    <label>锐化强度 <span class="param-value" id="ssAmtVal">1.5</span></label>
+                    <input type="range" id="param_ss_amount" min="0.5" max="3.0" step="0.1" value="1.5" oninput="document.getElementById('ssAmtVal').innerText=this.value">
+                </div>
+                <div class="control-group">
+                    <label>边界检测阈值 <span class="param-value" id="ssThreshVal">30</span></label>
+                    <input type="range" id="param_ss_threshold" min="10" max="100" step="5" value="30" oninput="document.getElementById('ssThreshVal').innerText=this.value">
+                </div>`;
+            break;
+        case 'apply_curve':
+            html = `<div class="control-group">
+                    <label>曲线预设</label>
+                    <select id="param_curve_preset" style="width:100%; border-radius:4px; border:1px solid rgba(255,255,255,0.1); background:#2A2A2E; color:#eee; padding:5px;">
+                        <option value="s_curve">S增强</option>
+                        <option value="brighten_shadows">拉暗部</option>
+                        <option value="compress_highlights">压高光</option>
+                        <option value="invert">负片</option>
+                        <option value="vintage_fade">胶片褪色</option>
+                    </select>
+                </div>`;
+            break;
+        case 'stylize':
+            html = `<div class="control-group">
+                    <label>风格图片 (必选)</label>
+                    <input type="file" id="param_second_image" accept="image/*" style="display:block; margin-top:8px;">
+                </div>
+                <div class="control-group">
+                    <label>优化步数 <span class="param-value" id="stStepVal">200</span></label>
+                    <input type="range" id="param_st_step" min="50" max="500" step="50" value="200" oninput="document.getElementById('stStepVal').innerText=this.value">
                 </div>`;
             break;
         default:
@@ -252,6 +346,27 @@ function collectParams(action) {
         const cutoff = parseFloat(document.getElementById('param_cutoff').value);
         params['cutoff'] = cutoff;
         paramDesc = `Cut=${cutoff}`;
+    } else if (action === 'intelligent_fill_light') {
+        params['strength'] = parseFloat(document.getElementById('param_ifl_strength').value);
+        params['shadow_threshold'] = parseFloat(document.getElementById('param_ifl_threshold').value);
+        paramDesc = `补光=${params.strength}`;
+    } else if (action === 'adjust_highlight') {
+        params['strength'] = parseFloat(document.getElementById('param_ah_strength').value);
+        params['highlight_threshold'] = parseFloat(document.getElementById('param_ah_threshold').value);
+        paramDesc = `高光=${params.strength}`;
+    } else if (action === 'add_salt_pepper_noise_optimized') {
+        params['prob'] = parseFloat(document.getElementById('param_spop_prob').value);
+        paramDesc = `噪比=${params.prob}`;
+    } else if (action === 'smart_sharpen') {
+        params['amount'] = parseFloat(document.getElementById('param_ss_amount').value);
+        params['edge_threshold'] = parseFloat(document.getElementById('param_ss_threshold').value);
+        paramDesc = `随边锐化=${params.amount}`;
+    } else if (action === 'apply_curve') {
+        params['preset'] = document.getElementById('param_curve_preset').value;
+        paramDesc = `曲线=${params.preset}`;
+    } else if (action === 'stylize') {
+        params['num_steps'] = parseInt(document.getElementById('param_st_step').value);
+        paramDesc = `步数=${params.num_steps}`;
     }
     
     return { params, paramDesc };
