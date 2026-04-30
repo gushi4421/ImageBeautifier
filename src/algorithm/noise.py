@@ -3,6 +3,7 @@
 支持高斯噪声与椒盐噪声的生成.
 """
 
+import cv2 as cv
 import numpy as np
 
 
@@ -25,10 +26,9 @@ def add_noise(image: np.ndarray, mode: str = "gaussian", **kwargs) -> np.ndarray
         # 获取高斯分布参数, 默认为均值0, 标准差20
         mean = kwargs.get("mean", 0.0)
         sigma = kwargs.get("sigma", 20.0)
-        # 生成与图像尺度一致的高斯随机矩阵
-        noise = np.random.normal(mean, sigma, image.shape)
-        # 叠加噪声并进行溢出处理
-        noisy_image = image.astype(np.float64) + noise
+        noise = np.empty(image.shape, dtype=np.float32)
+        cv.randn(noise, mean, sigma)
+        noisy_image = cv.add(image.astype(np.float32), noise)
         return np.clip(noisy_image, 0, 255).astype(image.dtype)
 
     elif mode == "salt_pepper":
@@ -38,8 +38,8 @@ def add_noise(image: np.ndarray, mode: str = "gaussian", **kwargs) -> np.ndarray
 
         noise_image = image.copy()
         h, w, _ = image.shape
-        # 生成随机概率矩阵, 用于决定哪些位置加噪
-        random_matrix = np.random.rand(h, w)
+        random_matrix = np.empty((h, w), dtype=np.float32)
+        cv.randu(random_matrix, 0.0, 1.0)
 
         # 比例的一半设为椒噪声(黑色 0)
         noise_image[random_matrix < (prob / 2.0)] = [0, 0, 0]

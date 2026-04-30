@@ -3,9 +3,8 @@
 包含均值滤波、中值滤波、高斯模糊以及双边滤波.
 """
 
+import cv2 as cv
 import numpy as np
-
-from src.utils import generate_gaussian_kernel
 
 
 def mean_filter(image: np.ndarray, kernel_size: int = 3) -> np.ndarray:
@@ -22,19 +21,11 @@ def mean_filter(image: np.ndarray, kernel_size: int = 3) -> np.ndarray:
     if kernel_size % 2 == 0:
         raise ValueError("卷积核大小必须为奇数")
 
-    h, w, c = image.shape
-    pad_size = kernel_size // 2
-    padded_image = np.pad(
-        image, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)), mode="reflect"
+    return cv.blur(
+        image,
+        ksize=(kernel_size, kernel_size),
+        borderType=cv.BORDER_REFLECT_101,
     )
-    filtered_image = np.zeros_like(image)
-
-    for u in range(w):
-        for v in range(h):
-            window = padded_image[v : v + kernel_size, u : u + kernel_size, :]
-            filtered_image[v, u] = window.mean(axis=(0, 1)).astype(np.uint8)
-
-    return filtered_image
 
 
 def median_filter(image: np.ndarray, kernel_size: int = 3) -> np.ndarray:
@@ -51,19 +42,20 @@ def median_filter(image: np.ndarray, kernel_size: int = 3) -> np.ndarray:
     if kernel_size % 2 == 0:
         raise ValueError("卷积核大小必须为奇数")
 
-    h, w, c = image.shape
     pad_size = kernel_size // 2
-    padded_image = np.pad(
-        image, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)), mode="reflect"
+    padded_image = cv.copyMakeBorder(
+        image,
+        pad_size,
+        pad_size,
+        pad_size,
+        pad_size,
+        borderType=cv.BORDER_REFLECT_101,
     )
-    filtered_image = np.zeros_like(image)
-
-    for u in range(w):
-        for v in range(h):
-            window = padded_image[v : v + kernel_size, u : u + kernel_size, :]
-            filtered_image[v, u] = np.median(window, axis=(0, 1)).astype(np.uint8)
-
-    return filtered_image
+    filtered_image = cv.medianBlur(padded_image, kernel_size)
+    return filtered_image[
+        pad_size : pad_size + image.shape[0],
+        pad_size : pad_size + image.shape[1],
+    ]
 
 
 def gaussian_blurring(image: np.ndarray, kernel_size: int = 3, sigma: float = 1.0):
@@ -78,28 +70,13 @@ def gaussian_blurring(image: np.ndarray, kernel_size: int = 3, sigma: float = 1.
     Returns:
         返回经高斯模糊处理的图像
     """
-    kernel = generate_gaussian_kernel(kernel_size=kernel_size, sigma=sigma)
-    h, w, _ = image.shape
-    pad_size = kernel_size // 2
-
-    padded_image = np.pad(
-        image, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)), mode="reflect"
+    return cv.GaussianBlur(
+        image,
+        ksize=(kernel_size, kernel_size),
+        sigmaX=sigma,
+        sigmaY=sigma,
+        borderType=cv.BORDER_REFLECT_101,
     )
-    blurred_image = np.zeros_like(image, dtype=np.float32)
-
-    for u in range(w):
-        for v in range(h):
-            # 提取与卷积核等大的局部图像窗口
-            window = padded_image[v : v + kernel_size, u : u + kernel_size, :]
-
-            # 将二维的卷积核通过 reshape(kernel_size, kernel_size, 1) 扩展为三维
-            # 利用 Numpy 的广播机制, 将高斯权重同时乘以 R, G, B 三个通道的像素值
-            weighted_window = window * kernel.reshape(kernel_size, kernel_size, 1)
-
-            # 将加权后的像素值求和, 赋给中心点
-            blurred_image[v, u] = np.sum(weighted_window, axis=(0, 1))
-
-    return np.clip(blurred_image, 0, 255).astype(np.uint8)
 
 
 def bilateral_filter_manual(
@@ -120,30 +97,10 @@ def bilateral_filter_manual(
     Returns:
         平滑后的图像,类型为np.uint8
     """
-    h, w, _ = image.shape
-    pad_size = kernel_size // 2
-    image_float = image.copy().astype(np.float32)
-    padded_image = np.pad(
-        image_float,
-        ((pad_size, pad_size), (pad_size, pad_size), (0, 0)),
-        mode="reflect",
+    return cv.bilateralFilter(
+        image,
+        d=kernel_size,
+        sigmaColor=sigma_r,
+        sigmaSpace=sigma_s,
+        borderType=cv.BORDER_REFLECT_101,
     )
-    filtered_image = np.zeros_like(image_float)
-    x_grid, y_grid = np.mgrid[-pad_size : pad_size + 1, -pad_size : pad_size + 1]
-    gaussian_weight = np.exp(-(x_grid**2 + y_grid**2) / (2 * sigma_s**2))
-    gaussian_weight = gaussian_weight.reshape(kernel_size, kernel_size, 1)
-    for u in range(w):
-        for v in range(h):
-            window = padded_image[v : v + kernel_size, u : u + kernel_size, :]
-            center_pixel = padded_image[v + pad_size, u + pad_size, :]
-
-            # 色彩差异
-            color_diff = np.sum((window - center_pixel) ** 2, axis=2, keepdims=True)
-            # 颜色权重
-            color_weight = np.exp(-color_diff / (2 * sigma_r**2))
-
-            combined_weight = gaussian_weight * color_weight
-            combined_weight /= np.sum(combined_weight, axis=(0, 1), keepdims=True)
-            filtered_image[v, u] = np.sum(window * combined_weight, axis=(0, 1))
-
-    return np.clip(filtered_image, 0, 255).astype(np.uint8)

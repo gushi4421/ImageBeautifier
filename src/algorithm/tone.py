@@ -19,16 +19,10 @@ def to_grayscale(image: np.ndarray) -> np.ndarray:
     Returns:
         转换后的单通道灰度图像, 形状为 (H, W), 数据类型为 uint8.
     """
-    # 获取图像尺寸,虽然此处未直接使用 h, w, 但常用于预处理检查
-    h, w, _ = image.shape
-
-    # 定义加权权重,对应 OpenCV 的 BGR 顺序权重
-    weights = np.array([0.114, 0.587, 0.299], dtype=np.float32)
-
-    # 通过矩阵点积快速计算全图灰度值
-    gray_image = np.dot(image, weights)
-
-    # 确保数值在 0-255 之间并转换数据类型
+    weights = np.array([[0.114, 0.587, 0.299]], dtype=np.float32)
+    gray_image = cv.transform(image.astype(np.float32), weights)
+    if gray_image.ndim == 3:
+        gray_image = gray_image[:, :, 0]
     return np.clip(gray_image, 0, 255).astype(np.uint8)
 
 
@@ -46,9 +40,7 @@ def binarize(image: np.ndarray, threshold: int = 127) -> np.ndarray:
     """
     if image.ndim == 3:
         image = to_grayscale(image)
-    binary_image = np.zeros_like(image)
-    # 大于阈值的像素点设置为白色(255)
-    binary_image[image > threshold] = 255
+    _, binary_image = cv.threshold(image, threshold, 255, cv.THRESH_BINARY)
     return binary_image
 
 
@@ -65,39 +57,12 @@ def otsu_binarize(image: np.ndarray) -> np.ndarray:
     """
     if image.ndim == 3:
         image = to_grayscale(image)
-    total_pixels = image.size
-    histogram = np.bincount(image.ravel(), minlength=256)
-    probabilities = histogram / total_pixels
-    intensity_levels = np.arange(256)
-    sum_mean = np.sum(probabilities * intensity_levels)
-
-    background_weight = 0.0
-    background_sum = 0.0
-    best_threshold = 0
-    max_variance = 0.0
-
-    for t in range(256):
-        background_weight += probabilities[t]
-        if background_weight == 0.0:
-            continue
-        if background_weight >= 1.0:
-            break
-
-        background_sum += probabilities[t] * intensity_levels[t]
-        background_mean = background_sum / background_weight
-        foreground_weight = 1 - background_weight
-        foreground_mean = (sum_mean - background_sum) / foreground_weight
-        variance = (
-            background_weight
-            * foreground_weight
-            * (background_mean - foreground_mean) ** 2
-        )
-        if variance > max_variance:
-            max_variance = variance
-            best_threshold = t
-
-    binary_image = np.zeros_like(image)
-    binary_image[image > best_threshold] = 255
+    _, binary_image = cv.threshold(
+        image,
+        0,
+        255,
+        cv.THRESH_BINARY | cv.THRESH_OTSU,
+    )
     return binary_image
 
 
@@ -106,8 +71,8 @@ def apply_colormap(image: np.ndarray):
     应用查找表进行图像伪彩色映射。
     """
     lut = generate_colormap_lut()
-    color_image = lut[image]
-    return color_image
+    channels = [cv.LUT(image, lut[:, idx]) for idx in range(3)]
+    return cv.merge(channels)
 
 
 def adjust_contrast(image: np.ndarray, alpha: float = 1.0):
@@ -121,12 +86,7 @@ def adjust_contrast(image: np.ndarray, alpha: float = 1.0):
     Returns:
         调整对比度后的图像.
     """
-    # 转为浮点型防止计算溢出
-    adjusted_image = image.astype(np.float32)
-    # 线性变换: f(x) = alpha * x
-    adjusted_image = adjusted_image * alpha
-    # 截断处理并转回 uint8 类型
-    return np.clip(adjusted_image, 0, 255).astype(np.uint8)
+    return cv.addWeighted(image, alpha, image, 0.0, 0.0)
 
 
 def adjust_brightness(image: np.ndarray, beta: int = 0):
@@ -139,11 +99,7 @@ def adjust_brightness(image: np.ndarray, beta: int = 0):
     Returns:
         调整亮度后的图像.
     """
-    adjusted_image = image.astype(np.float32)
-    # 线性变换: f(x) = x + beta
-    adjusted_image = adjusted_image + beta
-    # 确保数值合法性
-    return np.clip(adjusted_image, 0, 255).astype(np.uint8)
+    return cv.addWeighted(image, 1.0, image, 0.0, beta)
 
 
 def histogram(image: np.ndarray) -> np.ndarray:
@@ -156,22 +112,7 @@ def histogram(image: np.ndarray) -> np.ndarray:
     Returns:
         亮度分布均匀化后的增强图像.
     """
-    total_pixels = image.size
-    # 统计每个灰度级(0-255)出现的频次
-    hist_counts = np.bincount(image.ravel(), minlength=256)
-
-    # 计算概率密度函数 (PDF: Probability Density Function)
-    pdf = hist_counts / total_pixels
-
-    # 计算累积分布函数 (CDF: Cumulative Distribution Function)
-    cdf = np.cumsum(pdf)
-
-    # 生成查找表 (LUT): 将 CDF 映射到 0-255 区间并取整
-    lut = np.round(cdf * 255).astype(np.uint8)
-
-    # 根据查找表重映射图像像素值
-    color_image = lut[image]
-    return color_image
+    return cv.equalizeHist(image)
 
 
 def adjust_saturation(image: np.ndarray, alpha: float) -> np.ndarray:
@@ -227,12 +168,8 @@ def adjust_sharpness(
     """
     from src.algorithm.filter import gaussian_blurring
 
-    image_float = image.astype(np.float32)
-    blurred = gaussian_blurring(image, kernel_size=radius, sigma=sigma).astype(
-        np.float32
-    )
-    sharpened = image_float + amount * (image_float - blurred)
-    return np.clip(sharpened, 0, 255).astype(np.uint8)
+    blurred = gaussian_blurring(image, kernel_size=radius, sigma=sigma)
+    return cv.addWeighted(image, 1.0 + amount, blurred, -amount, 0.0)
 
 
 def synthesize_false_color_image(
@@ -263,15 +200,7 @@ def synthesize_false_color_image(
     ):
         raise ValueError("指定的波段索引越界.")
 
-    h, w = bands_list[0].shape
-    color_image = np.zeros((h, w, 3), dtype=np.uint8)
-
-    # 将指定的灰度波段分别赋值到 RGB 三个通道
-    color_image[:, :, 0] = bands_list[r_index]
-    color_image[:, :, 1] = bands_list[g_index]
-    color_image[:, :, 2] = bands_list[b_index]
-
-    return color_image
+    return cv.merge([bands_list[r_index], bands_list[g_index], bands_list[b_index]])
 
 
 def false_color_channel_swap(

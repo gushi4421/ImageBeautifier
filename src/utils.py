@@ -26,15 +26,9 @@ def generate_gaussian_kernel(kernel_size: int = 3, sigma: float = 1.0) -> np.nda
     """
     if kernel_size % 2 == 0 or kernel_size <= 0:
         raise ValueError("kernel_size 必须是大于 0 的奇数")
-    kernel = np.zeros((kernel_size, kernel_size), dtype=np.float64)
-    radius = kernel_size // 2
-    for i in range(kernel_size):
-        for j in range(kernel_size):
-            x = i - radius
-            y = j - radius
-            kernel[i, j] = math.exp(-(x**2 + y**2) / (2 * sigma**2))
-    kernel = kernel / kernel.sum()
-    return kernel
+    kernel_1d = cv.getGaussianKernel(kernel_size, sigma, ktype=cv.CV_64F)
+    kernel = kernel_1d @ kernel_1d.T
+    return kernel / kernel.sum()
 
 
 def generate_colormap_lut() -> np.ndarray:
@@ -116,18 +110,10 @@ def fft(image: np.ndarray) -> np.ndarray:
     """
     if image.ndim != 2:
         raise ValueError("频域变换前必须将图像转换为单通道的灰度图")
-    # 转化为float类型
     image_float = image.copy().astype(np.float32)
-
-    # 利用numpy.fft.fft2执行快速傅里叶变换
-    # 输出的 f_transform是 一个包含复数的矩阵
-    f_trainsform = np.fft.fft2(image_float)
-
-    # FFT 默认将最低频分量放置在矩阵的左上角
-    # fftshift 通过对角象限交换，将最低频分量强行移动到矩阵的物理正中心
-    f_shift = np.fft.fftshift(f_trainsform)
-
-    return f_shift
+    f_transform = cv.dft(image_float, flags=cv.DFT_COMPLEX_OUTPUT)
+    f_shift = np.fft.fftshift(f_transform, axes=(0, 1))
+    return f_shift[:, :, 0] + 1j * f_shift[:, :, 1]
 
 
 def ifft(spectrum: np.ndarray) -> np.ndarray:
@@ -142,13 +128,13 @@ def ifft(spectrum: np.ndarray) -> np.ndarray:
     """
     if spectrum.ndim != 2:
         raise ValueError("输入的图像必须是单通道的灰度图")
-    # 将最低频分量放回四个角
     f_ishift = np.fft.ifftshift(spectrum)
-
-    # 执行逆傅里叶变换
-    f_inverse = np.fft.ifft2(f_ishift)
-
-    return np.clip(np.abs(f_inverse), 0, 255).astype(np.uint8)
+    spectrum_cv = np.dstack(
+        (f_ishift.real.astype(np.float32), f_ishift.imag.astype(np.float32))
+    )
+    f_inverse = cv.idft(spectrum_cv, flags=cv.DFT_SCALE | cv.DFT_COMPLEX_OUTPUT)
+    magnitude = cv.magnitude(f_inverse[:, :, 0], f_inverse[:, :, 1])
+    return np.clip(magnitude, 0, 255).astype(np.uint8)
 
 
 def create_lowpass_mask(
@@ -295,20 +281,11 @@ def compute_fft(image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     if image.ndim != 2:
         raise ValueError("频域变换前必须将图像转换为单通道灰度图.")
 
-    image_float = image.astype(np.float32)
+    f_shift = fft(image)
 
-    # 利用 numpy.fft.fft2 执行二维快速傅里叶变换.
-    # 输出的 f_transform 是一个包含复数的矩阵 (实部和虚部).
-    f_transform = np.fft.fft2(image_float)
-
-    # [层次二: 频谱中心化]
-    # FFT 默认将零频分量(最低频)放置在矩阵的左上角 (0, 0) 处.
-    # fftshift 通过对角象限交换, 将零频分量强行移动到矩阵的物理正中心.
-    f_shift = np.fft.fftshift(f_transform)
-
-    # [层次三: 振幅提取与对数压缩]
-    # np.abs 计算复数的模长, 即特征波的振幅大小.
-    magnitude = np.abs(f_shift)
+    real_part = f_shift.real.astype(np.float32)
+    imag_part = f_shift.imag.astype(np.float32)
+    magnitude = cv.magnitude(real_part, imag_part)
 
     # 核心数学映射: 频域能量呈指数级衰减分布.
     # 使用 20 * log10(1 + x) 进行非线性压缩, 否则高频细节在视觉上完全不可见.
@@ -382,7 +359,6 @@ def spectral_filter(f_shift: np.ndarray, mask: np.ndarray) -> np.ndarray:
     Returns:
         逆变换还原后的空间域图像, 类型为 uint8.
     """
-    # 直接将复数矩阵与掩膜相乘
     f_filtered = f_shift * mask
 
     return ifft(f_filtered)
