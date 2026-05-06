@@ -9,3 +9,4 @@ output:
   tone: "data/tone"
   geometry: "data/geometry"
   stitching: "data/stitching"
+  extensions: "data/extensions"

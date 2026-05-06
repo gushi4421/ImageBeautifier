@@ -16,7 +16,7 @@ _config: dict | None = None
 def _load_config() -> dict:
     global _config
     if _config is None:
-        config_path = Path(__file__).resolve().parent.parent / "config.yaml"
+        config_path = Path(__file__).resolve().parent / "config.yaml"
         with open(config_path, "r", encoding="utf-8") as f:
             _config = yaml.safe_load(f)
     return _config
