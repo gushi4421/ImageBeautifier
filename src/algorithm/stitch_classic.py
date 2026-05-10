@@ -24,19 +24,11 @@ import numpy as np
 def extract_sift_features(
     image: np.ndarray,
 ) -> tuple[list[cv2.KeyPoint], np.ndarray]:
-    """
-    提取图像的 SIFT 特征点与描述子.
-
-    Args:
-        image: 输入图像, BGR 格式, 形状为 (H, W, 3).
-
-    Returns:
-        包含两个元素的元组:
-        1. keypoints: SIFT 关键点列表.
-        2. descriptors: 对应的描述子矩阵, 形状为 (N, 128).
-    """
-    # ── 在这里实现你的 SIFT 特征提取 ──
-    pass
+    """提取图像的 SIFT 特征点与描述子."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    sift = cv2.SIFT_create()
+    keypoints, descriptors = sift.detectAndCompute(gray, None)
+    return keypoints, descriptors
 
 
 def match_keypoints(
@@ -44,19 +36,51 @@ def match_keypoints(
     desc2: np.ndarray,
     ratio_thresh: float = 0.75,
 ) -> list[tuple[int, int]]:
-    """
-    对两张图的 SIFT 描述子进行暴力匹配, 并用 Lowe 比率测试筛选优质匹配.
+    """暴力匹配 + Lowe 比率测试筛选优质匹配."""
+    matcher = cv2.BFMatcher(cv2.NORM_L2)
+    raw_matches = matcher.knnMatch(desc1, desc2, k=2)
 
-    Args:
-        desc1: 第一张图的描述子, (N1, 128).
-        desc2: 第二张图的描述子, (N2, 128).
-        ratio_thresh: Lowe 比率阈值, 只有最近距离 / 次近距离 <= 此值时保留.
+    good_matches = []
+    for m, n in raw_matches:
+        if m.distance <= ratio_thresh * n.distance:
+            good_matches.append((m.queryIdx, m.trainIdx))
 
-    Returns:
-        筛选后的匹配点对索引列表, 每个元素为 (idx1, idx2).
-    """
-    # ── 在这里实现你的暴力匹配 + Lowe 比率测试 ──
-    pass
+    return good_matches
+
+
+def _normalize_points(pts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """对点集做归一化, 使均值为0、平均距离为 sqrt(2), 提升 DLT 数值稳定性."""
+    centroid = np.mean(pts, axis=0)
+    shifted = pts - centroid
+    mean_dist = np.mean(np.sqrt(np.sum(shifted**2, axis=1)))
+    scale = math.sqrt(2) / mean_dist
+    T = np.array(
+        [
+            [scale, 0, -scale * centroid[0]],
+            [0, scale, -scale * centroid[1]],
+            [0, 0, 1],
+        ],
+        dtype=np.float64,
+    )
+    ones = np.ones((pts.shape[0], 1), dtype=np.float64)
+    pts_h = np.hstack([pts, ones])
+    pts_norm = (T @ pts_h.T).T
+    return pts_norm[:, :2], T
+
+
+def _dlt_homography(pts1: np.ndarray, pts2: np.ndarray) -> np.ndarray:
+    """用 DLT 从 4 对匹配点计算 3x3 单应性矩阵."""
+    A = np.zeros((8, 9), dtype=np.float64)
+    for i in range(4):
+        x1, y1 = pts1[i]
+        x2, y2 = pts2[i]
+        A[2 * i] = [x1, y1, 1, 0, 0, 0, -x2 * x1, -x2 * y1, -x2]
+        A[2 * i + 1] = [0, 0, 0, x1, y1, 1, -y2 * x1, -y2 * y1, -y2]
+
+    _, _, Vt = np.linalg.svd(A)
+    h = Vt[-1]
+    H = h.reshape(3, 3)
+    return H / H[2, 2]
 
 
 def compute_homography_ransac(
@@ -66,29 +90,84 @@ def compute_homography_ransac(
     ransac_max_iters: int = 2000,
     ransac_confidence: float = 0.995,
 ) -> tuple[Optional[np.ndarray], np.ndarray]:
-    """
-    使用 RANSAC 迭代求解两张图像间的单应性矩阵 H.
+    """使用 RANSAC 迭代求解两张图像间的单应性矩阵 H."""
+    N = pts1.shape[0]
+    if N < 4:
+        return None, np.zeros(N, dtype=bool)
 
-    每次迭代:
-      1. 随机采样 4 对匹配点.
-      2. 通过 DLT (Direct Linear Transform) 求解 H.
-      3. 计算所有匹配点在 H 下的投影误差, 统计内点.
-      4. 保留内点最多的 H.
+    # 归一化提升数值稳定性
+    pts1_norm, T1 = _normalize_points(pts1)
+    pts2_norm, T2 = _normalize_points(pts2)
 
-    Args:
-        pts1: 第一张图的匹配点坐标, (N, 2).
-        pts2: 第二张图的匹配点坐标, (N, 2).
-        ransac_reproj_thresh: 内点判断的投影误差阈值 (像素).
-        ransac_max_iters: RANSAC 最大迭代次数.
-        ransac_confidence: 期望置信度, 用于提前终止.
+    best_inlier_mask = np.zeros(N, dtype=bool)
+    best_H = None
+    max_inliers = 0
+    iter_count = 0
 
-    Returns:
-        包含两个元素的元组:
-        1. H: 3x3 单应性矩阵 (成功时), 或 None (失败时).
-        2. inlier_mask: 布尔数组, (N,), True 表示该匹配点是内点.
-    """
-    # ── 在这里实现你的 RANSAC + DLT 求解 ──
-    pass
+    while iter_count < ransac_max_iters:
+        # 随机采样 4 对匹配点
+        sample_idx = np.random.choice(N, 4, replace=False)
+
+        # DLT 计算 H (在归一化坐标系)
+        H_norm = _dlt_homography(pts1_norm[sample_idx], pts2_norm[sample_idx])
+        if H_norm is None:
+            iter_count += 1
+            continue
+
+        # 反归一化
+        H = np.linalg.inv(T2) @ H_norm @ T1
+        H /= H[2, 2]
+
+        # 统计内点: 计算所有点在 H 下的投影误差
+        ones = np.ones((N, 1), dtype=np.float64)
+        pts1_h = np.hstack([pts1, ones])
+
+        proj = (H @ pts1_h.T).T
+        proj[:, 0] /= proj[:, 2]
+        proj[:, 1] /= proj[:, 2]
+
+        errors = np.sqrt(np.sum((proj[:, :2] - pts2) ** 2, axis=1))
+        inlier_mask = errors < ransac_reproj_thresh
+        num_inliers = np.sum(inlier_mask)
+
+        if num_inliers > max_inliers:
+            max_inliers = num_inliers
+            best_inlier_mask = inlier_mask
+            best_H = H
+
+            # 自适应迭代次数
+            inlier_ratio = num_inliers / N
+            if inlier_ratio > 0:
+                new_max_iters = math.log(1 - ransac_confidence) / math.log(
+                    1 - inlier_ratio**4
+                )
+                ransac_max_iters = min(ransac_max_iters, int(new_max_iters) + 1)
+
+        iter_count += 1
+
+    # 用所有内点重新优化 H
+    if best_H is not None and max_inliers >= 4:
+        inlier_pts1 = pts1[best_inlier_mask]
+        inlier_pts2 = pts2[best_inlier_mask]
+        inlier_pts1_norm, T1_refit = _normalize_points(inlier_pts1)
+        inlier_pts2_norm, T2_refit = _normalize_points(inlier_pts2)
+        H_refit_norm = _dlt_homography(inlier_pts1_norm[:4], inlier_pts2_norm[:4])
+        # 用所有内点通过最小二乘法重算: A h = 0 超定方程
+        M = inlier_pts1_norm.shape[0]
+        A = np.zeros((2 * M, 9), dtype=np.float64)
+        for i in range(M):
+            x1, y1 = inlier_pts1_norm[i]
+            x2, y2 = inlier_pts2_norm[i]
+            A[2 * i] = [x1, y1, 1, 0, 0, 0, -x2 * x1, -x2 * y1, -x2]
+            A[2 * i + 1] = [0, 0, 0, x1, y1, 1, -y2 * x1, -y2 * y1, -y2]
+        _, _, Vt = np.linalg.svd(A)
+        h = Vt[-1]
+        H_refit_norm = h.reshape(3, 3)
+        H_refit_norm /= H_refit_norm[2, 2]
+        best_H = np.linalg.inv(T2_refit) @ H_refit_norm @ T1_refit
+        best_H /= best_H[2, 2]
+
+    return best_H, best_inlier_mask
 
 
 def warp_perspective(
@@ -96,24 +175,54 @@ def warp_perspective(
     H: np.ndarray,
     output_size: tuple[int, int],
 ) -> np.ndarray:
-    """
-    对图像执行单应性变换 (逆向映射 + 双线性插值).
+    """逆向映射 + 双线性插值实现单应性变换."""
+    h, w = image.shape[:2]
+    out_w, out_h = output_size
+    channels = image.shape[2] if image.ndim == 3 else 1
+    if channels == 1:
+        result = np.zeros((out_h, out_w), dtype=np.uint8)
+    else:
+        result = np.zeros((out_h, out_w, channels), dtype=np.uint8)
 
-    遍历输出图像的每个像素 (u, v):
-      1. 通过 H_inv 将 (u, v) 映射回原图坐标 (x, y).
-      2. 若 (x, y) 在原图范围内, 用双线性插值取色; 否则填 0.
+    H_inv = np.linalg.inv(H)
 
-    Args:
-        image: 输入图像, BGR 格式, (H, W, 3).
-        H: 3x3 单应性矩阵 (从 img2 到 img1 的变换).
-        output_size: 输出图像尺寸 (out_w, out_h).
+    for u in range(out_w):
+        for v in range(out_h):
+            # 逆向映射: 输出坐标 -> 原图坐标
+            vec = H_inv @ np.array([u, v, 1.0], dtype=np.float64)
+            x = vec[0] / vec[2]
+            y = vec[1] / vec[2]
 
-    Returns:
-        变换后的图像, (out_h, out_w, 3), uint8 类型.
-    """
-    # ── 在这里实现你的逆向映射 + 双线性插值 ──
-    # 提示: 可以参考 geometry.py 中 zoom 函数的双线性插值写法
-    pass
+            if x < 0 or x >= w - 1 or y < 0 or y >= h - 1:
+                continue
+
+            x1 = int(math.floor(x))
+            y1 = int(math.floor(y))
+            x2 = min(x1 + 1, w - 1)
+            y2 = min(y1 + 1, h - 1)
+
+            dx = x - x1
+            dy = y - y1
+
+            # 双线性插值
+            if channels == 1:
+                p11 = float(image[y1, x1])
+                p12 = float(image[y2, x1])
+                p21 = float(image[y1, x2])
+                p22 = float(image[y2, x2])
+            else:
+                p11 = image[y1, x1].astype(np.float64)
+                p12 = image[y2, x1].astype(np.float64)
+                p21 = image[y1, x2].astype(np.float64)
+                p22 = image[y2, x2].astype(np.float64)
+
+            r1 = p11 * (1 - dx) + p21 * dx
+            r2 = p12 * (1 - dx) + p22 * dx
+            p = (1 - dy) * r1 + dy * r2
+
+            result[v, u] = np.clip(p, 0, 255).astype(np.uint8)
+
+    return result
 
 
 def linear_blend(
@@ -122,23 +231,37 @@ def linear_blend(
     mask1: np.ndarray,
     mask2: np.ndarray,
 ) -> np.ndarray:
-    """
-    对两张变形后的图像进行加权融合.
+    """按像素到重叠区边界的距离进行加权融合."""
+    out_h, out_w = warp1.shape[:2]
+    result = np.zeros_like(warp1)
 
-    在重叠区域, 使用按像素到重叠区边界的距离进行线性加权;
-    在非重叠区域, 直接取对应图像的值.
+    bool1 = mask1 > 0
+    bool2 = mask2 > 0
 
-    Args:
-        warp1: 第一张变换后的图像, (H, W, 3), uint8.
-        warp2: 第二张变换后的图像, (H, W, 3), uint8.
-        mask1: 第一张的有效区域 mask, (H, W), 二值 (0/255).
-        mask2: 第二张的有效区域 mask, (H, W), 二值 (0/255).
+    # 距离变换: 有效区域内像素到最近无效像素的距离
+    dist1 = cv2.distanceTransform(mask1, cv2.DIST_L1, cv2.DIST_MASK_PRECISE)
+    dist2 = cv2.distanceTransform(mask2, cv2.DIST_L1, cv2.DIST_MASK_PRECISE)
 
-    Returns:
-        融合后的图像, (H, W, 3), uint8.
-    """
-    # ── 在这里实现你的加权融合 ──
-    pass
+    # 防止除零
+    sum_dist = dist1 + dist2
+    sum_dist[sum_dist == 0] = 1.0
+
+    w1 = dist1 / sum_dist
+    w2 = dist2 / sum_dist
+
+    for c in range(3):
+        result[:, :, c] = (
+            warp1[:, :, c].astype(np.float64) * w1
+            + warp2[:, :, c].astype(np.float64) * w2
+        )
+
+    # 单图区域直接取对应图像的值
+    only1 = bool1 & ~bool2
+    only2 = bool2 & ~bool1
+    result[only1] = warp1[only1]
+    result[only2] = warp2[only2]
+
+    return np.clip(result, 0, 255).astype(np.uint8)
 
 
 def stitch_images_classic(
@@ -176,9 +299,7 @@ def stitch_images_classic(
     print(f"[ClassicStitch] 匹配点: {len(matches)}")
 
     if len(matches) < 4:
-        raise RuntimeError(
-            f"匹配点不足 ({len(matches)} < 4), 无法计算单应性矩阵"
-        )
+        raise RuntimeError(f"匹配点不足 ({len(matches)} < 4), 无法计算单应性矩阵")
 
     # ── 4. RANSAC 求解单应性矩阵 H ──
     pts1 = np.float32([kp1[m[0]].pt for m in matches])
@@ -231,6 +352,7 @@ def stitch_images_classic(
 if __name__ == "__main__":
     # 简单测试
     import sys
+
     result = stitch_images_classic(
         "data/stitching/carpark_01.jpg",
         "data/stitching/carpark_02.jpg",

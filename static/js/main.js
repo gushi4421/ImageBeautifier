@@ -1,6 +1,5 @@
 // 全局历史状态 (核心重构点)
 let currentAction = 'mean_filter';
-let videoAction = null;
 let imageHistory = []; // 保存每一层状态: { img, tool, action, params, paramDesc }
 let currentStep = -1;  // 当前所处的历史版本指针
 
@@ -32,7 +31,13 @@ dropzone.addEventListener('drop', (e) => {
 
 uploadOverlay.addEventListener('click', () => imageInput.click());
 imageInput.addEventListener('change', function(e) {
-    if (e.target.files.length) handleSingleFile(e.target.files[0]);
+    if (e.target.files.length) {
+        isBatchMode = false;
+        batchFilesData = [];
+        btnBatchProcess.style.display = 'none';
+        handleSingleFile(e.target.files[0]);
+    }
+    e.target.value = ''; // 重置 file input 以允许重复选取同一个文件
 });
 
 // 处理导入文件夹
@@ -62,6 +67,7 @@ folderInput.addEventListener('change', function(e) {
         };
         r.readAsDataURL(file);
     });
+    e.target.value = ''; // 重置 folder input
 });
 
 // 核心：读取图像并入栈
@@ -118,7 +124,6 @@ toolItems.forEach(item => {
         toolItems.forEach(i => i.classList.remove('active'));
         item.classList.add('active');
         currentAction = item.dataset.action;
-        videoAction = item.dataset.action;
         renderParams(currentAction); // 取自 uiParamLoader.js
     });
 });
@@ -153,14 +158,23 @@ btnBatchProcess.addEventListener('click', async function() {
         const imagesB64 = batchFilesData.map(f => f.targetB64);
         const data = await processBatchAPI(imagesB64, pipeline); // 取自 api.js
         if (data.success) {
-            // 下载 ZIP太复杂，直接触发多次浏览器单图下载或提示成功
+            // 下载: 添加短暂延时并加入 DOM, 避免被浏览器识别为多重下载滥用而拦截
             data.result_images.forEach((b64, idx) => {
-                const lnk = document.createElement('a');
-                lnk.download = `Batch_Processed_${batchFilesData[idx].name}`;
-                lnk.href = b64;
-                lnk.click();
+                setTimeout(() => {
+                    const lnk = document.createElement('a');
+                    lnk.download = `Processed_${batchFilesData[idx].name}`;
+                    lnk.href = "data:image/png;base64," + b64; 
+                    if (b64.startsWith("data:image")) {
+                        lnk.href = b64;
+                    }
+                    document.body.appendChild(lnk);
+                    lnk.click();
+                    document.body.removeChild(lnk);
+                }, idx * 600); // 每张间隔 600ms
             });
-            alert("批量处理并下载完成！");
+            setTimeout(() => {
+                alert("批量处理完成，正在逐个下载...");
+            }, data.result_images.length * 600 + 100);
         }
     } catch(err) {
         alert("批量处理失败");
@@ -181,6 +195,7 @@ processBtn.addEventListener('click', async function() {
 
     try {
         let secondImgB64 = null;
+        let thirdImgB64 = null;
         const fileInput = document.getElementById('param_second_image');
         if (fileInput) {
             if (fileInput.files.length === 0) {
@@ -205,7 +220,7 @@ processBtn.addEventListener('click', async function() {
             isRepeatedAction = true;
         }
 
-        const data = await processImageAPI(currentAction, imageHistory[baseStep].img, params, secondImgB64); // 取自 api.js
+        const data = await processImageAPI(currentAction, imageHistory[baseStep].img, params, secondImgB64, thirdImgB64); // 取自 api.js
 
         if (data.success) {
             const toolName = document.querySelector(`.tool-item[data-action="${currentAction}"]`).innerText;
