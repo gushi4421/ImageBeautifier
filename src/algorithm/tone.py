@@ -104,7 +104,10 @@ def otsu_binarize(image: np.ndarray) -> np.ndarray:
 def apply_colormap(image: np.ndarray):
     """
     应用查找表进行图像伪彩色映射。
+    若输入为彩色图, 自动转为灰度图再处理。
     """
+    if image.ndim == 3:
+        image = to_grayscale(image)
     lut = generate_colormap_lut()
     color_image = lut[image]
     return color_image

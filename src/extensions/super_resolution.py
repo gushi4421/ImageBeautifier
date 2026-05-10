@@ -7,7 +7,7 @@ Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data
 
 本模块将 Real-ESRGAN 封装为简洁的接口, 支持 4 倍放大超分辨率.
 
-"创新点": 
+"创新点":
   1. 超分前使用双边滤波进行预处理降噪, 避免放大图像中的噪声
   2. 超分后配合 unsharp masking 锐化, 增强边缘清晰度
 
@@ -24,6 +24,29 @@ from typing import Optional
 
 import cv2
 import numpy as np
+
+# 模块级缓存：存放已转为纯 ASCII 路径的模型副本，避免 OpenCV DNN 中文路径打不开
+_SAFE_MODEL_PATHS: dict = {}
+
+
+def _ascii_safe_path(path: str) -> str:
+    """若 path 含非 ASCII 字符则复制到系统临时目录，返回可安全传给 OpenCV 的路径。"""
+    if path in _SAFE_MODEL_PATHS:
+        return _SAFE_MODEL_PATHS[path]
+    try:
+        path.encode("ascii")
+        return path
+    except UnicodeEncodeError:
+        import shutil
+        import tempfile
+
+        safe_dir = os.path.join(tempfile.gettempdir(), "img_enhancer_weights")
+        os.makedirs(safe_dir, exist_ok=True)
+        safe_path = os.path.join(safe_dir, os.path.basename(path))
+        if not os.path.exists(safe_path):
+            shutil.copy2(path, safe_path)
+        _SAFE_MODEL_PATHS[path] = safe_path
+        return safe_path
 
 
 def _pre_denoise(image: np.ndarray, strength: float = 1.0) -> np.ndarray:
@@ -99,43 +122,51 @@ def super_resolve(
         img = _pre_denoise(img)
         print("[SR] 预处理: 双边滤波降噪")
 
-    # ── 加载 Real-ESRGAN 模型 ──
+    # ── 加载 OpenCV DNN 超分模型 ──
     try:
-        import torch
+        from cv2 import dnn_superres
     except ImportError:
-        raise ImportError("需要 PyTorch: pip install torch")
-
-    print("[SR] 加载 Real-ESRGAN 模型...")
-
-    # Real-ESRGAN 通过 torch.hub 加载, 首次会自动下载 ~20MB 模型
-    try:
-        model = torch.hub.load(
-            "xinntao/Real-ESRGAN",
-            "RealESRGAN_x4plus",
-            pretrained=True,
-            trust_repo=True,
+        raise ImportError(
+            "需要安装 opencv-contrib-python: pip install opencv-contrib-python"
         )
-    except Exception as e:
-        raise RuntimeError(f"Real-ESRGAN 加载失败: {e}")
 
-    if device == "cuda" and torch.cuda.is_available():
-        model = model.to("cuda")
-        print("[SR] 设备: CUDA")
-    else:
-        if device == "cuda":
-            warnings.warn("CUDA 不可用, 回退到 CPU")
-        print("[SR] 设备: CPU")
+    import urllib.request
 
-    model.eval()
+    print("[SR] 准备 EDSR 模型...")
+
+    # 自动下载轻量级 EDSR_x4 模型
+    model_dir = os.path.join(os.path.dirname(__file__), "weights")
+    os.makedirs(model_dir, exist_ok=True)
+    model_path = os.path.join(model_dir, "EDSR_x4.pb")
+
+    if not os.path.exists(model_path):
+        print("[SR] 正在下载 EDSR_x4.pb 模型文件...")
+        # EDSR_x4 约 38MB
+        url = "https://github.com/Saafke/EDSR_Tensorflow/raw/master/models/EDSR_x4.pb"
+        try:
+            urllib.request.urlretrieve(url, model_path)
+            print("[SR] 模型下载完成.")
+        except Exception as e:
+            raise RuntimeError(f"下载模型失败: {e}。请手动下载 {url} 放入 {model_dir}")
 
     # ── 超分推理 ──
-    print("[SR] 超分推理中...")
+    print("[SR] 超分推理中 (OpenCV DNN)...")
+    try:
+        sr = dnn_superres.DnnSuperResImpl_create()
+        sr.readModel(_ascii_safe_path(model_path))
+        sr.setModel("edsr", 4)
+        if device == "cuda" and cv2.cuda.getCudaEnabledDeviceCount() > 0:
+            sr.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+            sr.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+            print("[SR] 设备: CUDA backend")
+        else:
+            sr.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+            sr.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+            print("[SR] 设备: CPU backend")
 
-    # Real-ESRGAN 接受 RGB [0,255] uint8 → 输出 RGB [0,255] uint8
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    with torch.no_grad():
-        output_rgb = model.predict(img_rgb)
-    sr_result = cv2.cvtColor(output_rgb, cv2.COLOR_RGB2BGR)
+        sr_result = sr.upsample(img)
+    except Exception as e:
+        raise RuntimeError(f"超分辨率推理失败: {e}")
 
     print(f"[SR] 输出: {sr_result.shape[1]}×{sr_result.shape[0]} (4×)")
 

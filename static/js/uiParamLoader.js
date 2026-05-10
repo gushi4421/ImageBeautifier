@@ -188,7 +188,6 @@ function renderParams(action) {
                 </div>`;
             break;
         case 'false_color_channel_swap':
-        case 'synthesize_false_color_image':
             html = `<div class="control-group">
                     <label>R通道 选源 <span class="param-value" id="rsrcVal">2(R)</span></label>
                     <input type="range" id="param_r_src" min="0" max="2" step="1" value="2" oninput="document.getElementById('rsrcVal').innerText=this.value==0?'0(B)':(this.value==1?'1(G)':'2(R)')">
@@ -200,6 +199,28 @@ function renderParams(action) {
                 <div class="control-group">
                     <label>B通道 选源 <span class="param-value" id="bsrcVal">1(G)</span></label>
                     <input type="range" id="param_b_src" min="0" max="2" step="1" value="1" oninput="document.getElementById('bsrcVal').innerText=this.value==0?'0(B)':(this.value==1?'1(G)':'2(R)')">
+                </div>`;
+            break;
+        case 'synthesize_false_color_image':
+            html = `<div class="control-group">
+                    <label>波段 2 图像 (必选)</label>
+                    <input type="file" id="param_second_image" accept="image/*" style="display:block; margin-top:8px;">
+                </div>
+                <div class="control-group">
+                    <label>波段 3 图像 (必选)</label>
+                    <input type="file" id="param_third_image" accept="image/*" style="display:block; margin-top:8px;">
+                </div>
+                <div class="control-group">
+                    <label>R通道 选源 (0~2) <span class="param-value" id="rsrcVal">2(img3)</span></label>
+                    <input type="range" id="param_r_src" min="0" max="2" step="1" value="2" oninput="document.getElementById('rsrcVal').innerText=this.value">
+                </div>
+                <div class="control-group">
+                    <label>G通道 选源 (0~2) <span class="param-value" id="gsrcVal">0(img1)</span></label>
+                    <input type="range" id="param_g_src" min="0" max="2" step="1" value="0" oninput="document.getElementById('gsrcVal').innerText=this.value">
+                </div>
+                <div class="control-group">
+                    <label>B通道 选源 (0~2) <span class="param-value" id="bsrcVal">1(img2)</span></label>
+                    <input type="range" id="param_b_src" min="0" max="2" step="1" value="1" oninput="document.getElementById('bsrcVal').innerText=this.value">
                 </div>`;
             break;
         case 'intelligent_fill_light':
@@ -223,9 +244,20 @@ function renderParams(action) {
                 </div>`;
             break;
         case 'add_salt_pepper_noise_optimized':
+        case 'add_noise_salt_pepper':
             html = `<div class="control-group">
-                    <label>噪声比例 <span class="param-value" id="spopProbVal">0.05</span></label>
-                    <input type="range" id="param_spop_prob" min="0.01" max="0.2" step="0.01" value="0.05" oninput="document.getElementById('spopProbVal').innerText=this.value">
+                    <label>噪声概率 <span class="param-value" id="probVal">0.05</span></label>
+                    <input type="range" id="param_prob" min="0.01" max="0.5" step="0.01" value="0.05" oninput="document.getElementById('probVal').innerText=this.value">
+                </div>`;
+            break;
+        case 'add_noise_gaussian':
+            html = `<div class="control-group">
+                    <label>高斯噪声方差 <span class="param-value" id="varVal">0.01</span></label>
+                    <input type="range" id="param_var" min="0.001" max="0.1" step="0.001" value="0.01" oninput="document.getElementById('varVal').innerText=this.value">
+                </div>
+                <div class="control-group">
+                    <label>高斯噪声均值 <span class="param-value" id="meanVal">0</span></label>
+                    <input type="range" id="param_mean" min="-0.5" max="0.5" step="0.01" value="0" oninput="document.getElementById('meanVal').innerText=this.value">
                 </div>`;
             break;
         case 'smart_sharpen':
@@ -350,12 +382,16 @@ function collectParams(action) {
         params['strength'] = parseFloat(document.getElementById('param_ifl_strength').value);
         params['shadow_threshold'] = parseFloat(document.getElementById('param_ifl_threshold').value);
         paramDesc = `补光=${params.strength}`;
+    } else if (action === 'add_noise_gaussian') {
+        params['var'] = parseFloat(document.getElementById('param_var').value);
+        params['mean'] = parseFloat(document.getElementById('param_mean').value);
+        paramDesc = `方差=${params.var} 均值=${params.mean}`
     } else if (action === 'adjust_highlight') {
         params['strength'] = parseFloat(document.getElementById('param_ah_strength').value);
         params['highlight_threshold'] = parseFloat(document.getElementById('param_ah_threshold').value);
         paramDesc = `高光=${params.strength}`;
-    } else if (action === 'add_salt_pepper_noise_optimized') {
-        params['prob'] = parseFloat(document.getElementById('param_spop_prob').value);
+    } else if (['add_salt_pepper_noise_optimized', 'add_noise_salt_pepper'].includes(action)) {
+        params['prob'] = parseFloat(document.getElementById('param_prob').value);
         paramDesc = `噪比=${params.prob}`;
     } else if (action === 'smart_sharpen') {
         params['amount'] = parseFloat(document.getElementById('param_ss_amount').value);

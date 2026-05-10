@@ -3,8 +3,8 @@
  * 负责跟后端的通信 (单步处理 / 批量流水线处理)
  */
 
-async function processImageAPI(action, base64Image, params, secondBase64Image=null) {
-    const images = secondBase64Image ? [base64Image, secondBase64Image] : [base64Image];
+async function processImageAPI(action, base64Image, params, ...extraBase64Images) {
+    const images = [base64Image, ...extraBase64Images].filter(img => img !== null && img !== undefined);
     const response = await fetch('/api/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

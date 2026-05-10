@@ -52,9 +52,9 @@ def _get_vgg(device: torch.device) -> nn.Sequential:
 
 # ── 内容/风格层配置 ──
 CONTENT_LAYERS = {"conv4": 21}  # VGG-19 conv4_2 的索引
-STYLE_LAYERS = {           # VGG-19 中风格层的索引
-    "conv1": 1,   # conv1_1
-    "conv2": 6,   # conv2_1
+STYLE_LAYERS = {  # VGG-19 中风格层的索引
+    "conv1": 1,  # conv1_1
+    "conv2": 6,  # conv2_1
     "conv3": 11,  # conv3_1
     "conv4": 20,  # conv4_1
     "conv5": 29,  # conv5_1
@@ -74,10 +74,12 @@ def _gram_matrix(feature_map: torch.Tensor) -> torch.Tensor:
 def _preprocess(img: np.ndarray, device: torch.device) -> torch.Tensor:
     """BGR uint8 → 归一化 Tensor (1, 3, H, W)."""
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    tf = T.Compose([
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
+    tf = T.Compose(
+        [
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
     return tf(img_rgb).unsqueeze(0).to(device)
 
 
@@ -139,17 +141,15 @@ def stylize(
 
     # ── 提取内容目标 ──
     content_targets = {}
-    x = content_tensor
     for name, idx in CONTENT_LAYERS.items():
-        x = vgg[: idx + 1](x)
-        content_targets[name] = x.clone()
+        feat = vgg[: idx + 1](content_tensor)
+        content_targets[name] = feat.detach()
 
     # ── 提取风格目标 (Gram 矩阵) ──
     style_targets = {}
-    x = style_tensor
     for name, idx in STYLE_LAYERS.items():
-        x = vgg[: idx + 1](x)
-        style_targets[name] = _gram_matrix(x)
+        feat = vgg[: idx + 1](style_tensor)
+        style_targets[name] = _gram_matrix(feat).detach()
 
     # ── 初始化优化目标 ──
     target = content_tensor.clone().requires_grad_(True)
@@ -162,26 +162,24 @@ def stylize(
 
     def closure():
         optimizer.zero_grad()
-        x = target
         total_loss = 0.0
 
         # 内容损失 (conv4_2)
         for name, idx in CONTENT_LAYERS.items():
-            x_feat = vgg[: idx + 1](x)
+            x_feat = vgg[: idx + 1](target)
             total_loss += content_weight * nn.MSELoss()(x_feat, content_targets[name])
 
         # 风格损失 (Gram 矩阵)
         for name, idx in STYLE_LAYERS.items():
-            x_feat = vgg[: idx + 1](x)
+            x_feat = vgg[: idx + 1](target)
             gram_x = _gram_matrix(x_feat)
             loss = nn.MSELoss()(gram_x, style_targets[name])
             total_loss += style_weight * STYLE_WEIGHTS[name] * loss
 
         # 全变分损失 (平滑正则)
-        tv_loss = (
-            torch.sum(torch.abs(target[:, :, :, :-1] - target[:, :, :, 1:]))
-            + torch.sum(torch.abs(target[:, :, :-1, :] - target[:, :, 1:, :]))
-        )
+        tv_loss = torch.sum(
+            torch.abs(target[:, :, :, :-1] - target[:, :, :, 1:])
+        ) + torch.sum(torch.abs(target[:, :, :-1, :] - target[:, :, 1:, :]))
         total_loss += tv_weight * tv_loss
 
         total_loss.backward()
